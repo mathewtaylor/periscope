@@ -172,6 +172,18 @@ If you re-private the package later, authenticate on the pulling host with a Git
 echo "$CR_PAT" | docker login ghcr.io -u mathewtaylor --password-stdin
 ```
 
+### Auto-starting on boot
+
+The compose file uses `restart: unless-stopped`, so the container:
+
+- restarts if it crashes,
+- comes back up automatically when the Docker daemon restarts (e.g., after a reboot),
+- stays down only if you explicitly `docker stop periscope` — your manual choice is preserved across daemon restarts, which is what you want while debugging.
+
+What it **can't** do is start Docker itself. On a Mac mini, open **Docker Desktop → Settings → General** and tick **"Start Docker Desktop when you sign in"** so the daemon is running after a reboot; the container will then come up on its own.
+
+On Linux, enable the daemon at boot with `sudo systemctl enable --now docker`.
+
 ### Updating
 
 CI republishes `:latest` on every push to `main`. Roll forward with:
