@@ -132,34 +132,44 @@ Once CI has published the image to GHCR, you don't need to clone the repo or ins
 
 ### One-liner bring-up
 
+The source repo is private, so `raw.githubusercontent.com` won't serve files without auth. Instead, create the compose file inline on the host:
+
 ```bash
 # On the Mac mini (or any always-on host):
 mkdir -p ~/periscope && cd ~/periscope
-curl -fsSL https://raw.githubusercontent.com/mathewtaylor/periscope/main/docker-compose.yml -o docker-compose.yml
+
+cat > docker-compose.yml <<'EOF'
+services:
+  periscope:
+    image: ghcr.io/mathewtaylor/periscope:latest
+    container_name: periscope
+    restart: unless-stopped
+    ports:
+      - "${PERISCOPE_HOST_PORT:-5050}:${PORT:-5050}"
+    volumes:
+      - periscope-data:/data
+    environment:
+      PORT: "${PORT:-5050}"
+      DB_PATH: "/data/events.db"
+
+volumes:
+  periscope-data:
+EOF
+
 docker compose up -d
 docker compose logs -f periscope
 ```
 
 That pulls `ghcr.io/mathewtaylor/periscope:latest` (multi-arch: `linux/amd64` + `linux/arm64`, so Apple Silicon is native) and starts it on port `5050`. State persists in the `periscope-data` named volume.
 
-### Image visibility — private repo, private image
+### Image visibility
 
-Because `github.com/mathewtaylor/periscope` is private, the published container image inherits that visibility and requires authentication to pull by default. Pick one:
+The container image has been flipped to **public** at [`ghcr.io/mathewtaylor/periscope`](https://github.com/users/mathewtaylor/packages/container/periscope) even though the source repo is private. `docker pull` works without auth.
 
-**Option 1 — make the image public (recommended for a personal project).** Zero-auth pulls from anywhere. Visit:
-
-```
-https://github.com/users/mathewtaylor/packages/container/periscope/settings
-```
-
-→ **Danger Zone** → **Change visibility** → **Public**. The source repo stays private.
-
-**Option 2 — authenticate on the pulling host.** Generate a GitHub PAT with the `read:packages` scope (classic token or fine-grained with package read access), then on the host:
+If you re-private the package later, authenticate on the pulling host with a GitHub PAT that has `read:packages`:
 
 ```bash
 echo "$CR_PAT" | docker login ghcr.io -u mathewtaylor --password-stdin
-docker compose pull
-docker compose up -d
 ```
 
 ### Updating
