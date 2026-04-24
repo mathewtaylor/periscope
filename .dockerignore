@@ -1,0 +1,15 @@
+node_modules
+web/node_modules
+web/dist
+data
+*.db
+*.db-wal
+*.db-shm
+.git
+.gitignore
+docs
+scripts
+.claude
+.vscode
+*.log
+.DS_Store

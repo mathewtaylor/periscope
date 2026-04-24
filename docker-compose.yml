@@ -1,0 +1,16 @@
+services:
+  periscope:
+    build: .
+    image: periscope:latest
+    container_name: periscope
+    restart: unless-stopped
+    ports:
+      - "5050:5050"
+    volumes:
+      - periscope-data:/data
+    environment:
+      PORT: "5050"
+      DB_PATH: "/data/events.db"
+
+volumes:
+  periscope-data:

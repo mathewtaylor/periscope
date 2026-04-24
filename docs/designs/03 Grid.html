@@ -1,0 +1,723 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Periscope — Grid</title>
+<meta name="viewport" content="width=1440" />
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #0c0d10;
+    --bg-1:     #111317;
+    --bg-2:     #171a1f;
+    --bg-3:     #1e2229;
+    --line:     #23272f;
+    --line-2:   #2b3039;
+    --fg:       #e5e8ee;
+    --fg-1:     #b4b9c2;
+    --fg-2:     #7b8290;
+    --fg-3:     #525a66;
+    --fg-4:     #363c46;
+    --run:      #7fb3f0;   /* cool blue — running */
+    --run-dim:  #2a4366;
+    --sub:      #b59ce6;   /* lavender — subagents */
+    --sub-dim:  #3a3258;
+    --attn:     #e3b155;   /* amber */
+    --attn-dim: #58431d;
+    --err:      #e27a72;
+    --ok:       #86c49a;
+  }
+  html, body { background: var(--bg); color: var(--fg); font-family: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  .mono { font-family: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace; font-feature-settings: "zero"; }
+  .bg-bg-1 { background: var(--bg-1); }
+  .bg-bg-2 { background: var(--bg-2); }
+  .bg-bg-3 { background: var(--bg-3); }
+  .border-line { border-color: var(--line); }
+  .border-line-2 { border-color: var(--line-2); }
+  .text-fg-1 { color: var(--fg-1); }
+  .text-fg-2 { color: var(--fg-2); }
+  .text-fg-3 { color: var(--fg-3); }
+  .text-fg-4 { color: var(--fg-4); }
+  .c-run { color: var(--run); } .c-sub { color: var(--sub); } .c-attn { color: var(--attn); } .c-err { color: var(--err); } .c-ok { color: var(--ok); }
+  .bg-run { background: var(--run); } .bg-sub { background: var(--sub); } .bg-attn { background: var(--attn); } .bg-err { background: var(--err); }
+
+  .dot { width: 6px; height: 6px; border-radius: 999px; display: inline-block; }
+
+  @keyframes breathe { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
+  .breathe { animation: breathe 2.2s ease-in-out infinite; }
+
+  @keyframes slideUp { from { opacity: 0; transform: translateY(4px);} to { opacity: 1; transform: none;} }
+  .slide-up { animation: slideUp .4s ease-out both; }
+
+  /* tile base */
+  .tile {
+    background: var(--bg-1);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color .15s ease, background .15s ease, transform .15s ease;
+  }
+  .tile:hover { border-color: var(--line-2); background: var(--bg-2); }
+  .tile[data-state="running"] { border-top: 1px solid var(--run); }
+  .tile[data-state="sub"]     { border-top: 1px solid var(--sub); }
+  .tile[data-state="wait"]    {
+    border-top: 1px solid var(--attn);
+    background: linear-gradient(180deg, rgba(227,177,85,0.06) 0%, var(--bg-1) 40%);
+  }
+  .tile[data-state="idle"]    { opacity: .72; }
+
+  /* sparkline columns */
+  .spark { display: flex; align-items: flex-end; gap: 2px; height: 26px; }
+  .spark > span { width: 4px; background: var(--fg-4); border-radius: 1px; }
+  .spark > span.active { background: var(--run); }
+  .spark > span.sub    { background: var(--sub); }
+  .spark > span.attn   { background: var(--attn); }
+  .spark > span.err    { background: var(--err); }
+
+  *::-webkit-scrollbar { width: 10px; height: 10px; }
+  *::-webkit-scrollbar-thumb { background: #262a33; border-radius: 10px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+
+  kbd { font: inherit; font-size: 10px; padding: 1px 5px; border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 3px; color: var(--fg-1); background: var(--bg-2); }
+
+  .vsep { width: 1px; height: 12px; background: var(--line-2); display: inline-block; vertical-align: middle; }
+
+  /* subagent chip bar */
+  .chip { padding: 1px 7px; font-size: 10.5px; border-radius: 999px; border: 1px solid var(--line-2); color: var(--fg-1); }
+  .chip.sub { color: var(--sub); border-color: var(--sub-dim); background: rgba(181,156,230,0.06); }
+  .chip.run { color: var(--run); border-color: var(--run-dim); background: rgba(127,179,240,0.06); }
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- =========== TOP CHROME =========== -->
+<header class="sticky top-0 z-40 bg-[rgba(12,13,16,0.92)] backdrop-blur border-b border-line">
+  <div class="px-6 h-12 flex items-center gap-6 text-[13px]">
+    <div class="flex items-center gap-2.5">
+      <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><rect x="2.5" y="3" width="4" height="12" rx="1" stroke="currentColor" stroke-width="1.3" class="text-fg-1"/><rect x="8" y="6" width="4" height="9" rx="1" stroke="currentColor" stroke-width="1.3" class="text-fg-1"/><rect x="13.5" y="1.5" width="4" height="13.5" rx="1" stroke="currentColor" stroke-width="1.3" class="text-fg-1" transform="translate(-2 0)"/></svg>
+      <span class="tracking-tight font-medium">Periscope</span>
+      <span class="text-fg-3">·</span>
+      <span class="text-fg-2 mono text-[12px]">grid</span>
+    </div>
+    <nav class="flex items-center gap-1 text-fg-2 text-[12.5px]">
+      <a class="px-2.5 py-1 rounded-md bg-bg-2 text-fg-1">Sessions</a>
+      <a class="px-2.5 py-1 rounded-md hover:text-fg-1">Events</a>
+      <a class="px-2.5 py-1 rounded-md hover:text-fg-1">Projects</a>
+      <a class="px-2.5 py-1 rounded-md hover:text-fg-1">Config</a>
+    </nav>
+    <div class="ml-auto flex items-center gap-5 text-fg-2 text-[12px]">
+      <span class="mono"><span class="dot bg-run breathe align-middle mr-1.5"></span>5 active</span>
+      <span class="vsep"></span>
+      <span class="mono">3.4 ev/s</span>
+      <span class="vsep"></span>
+      <span class="mono">12d 04h</span>
+      <span class="vsep"></span>
+      <kbd>⌘K</kbd>
+    </div>
+  </div>
+
+  <!-- ALERTS STRIP -->
+  <div class="px-6 h-10 flex items-center gap-4 text-[12.5px] bg-[#15130c] border-t border-line-2" style="box-shadow: inset 2px 0 0 var(--attn);">
+    <span class="inline-flex items-center gap-2 text-[10.5px] uppercase tracking-[0.14em] c-attn">
+      <span class="dot bg-attn breathe"></span>awaiting you
+    </span>
+    <span class="text-fg-1">periscope</span>
+    <span class="text-fg-3">needs approval for</span>
+    <span class="mono text-fg-1">Bash(docker compose up)</span>
+    <span class="text-fg-3 mono">· 00:00:42</span>
+    <div class="ml-auto flex items-center gap-2 text-[11.5px] mono">
+      <button class="px-2.5 py-1 rounded-md border border-[var(--attn-dim)] c-attn hover:bg-[rgba(227,177,85,0.08)]">Review</button>
+      <button class="px-2 py-1 rounded-md text-fg-2 hover:text-fg-1">Mute 5m</button>
+    </div>
+  </div>
+</header>
+
+<!-- =========== VIEW 1 — SESSIONS HOME (TILE WALL) =========== -->
+<section class="px-6 pt-7">
+  <div class="flex items-end justify-between mb-4">
+    <div>
+      <h1 class="text-[24px] tracking-tight font-medium">Sessions</h1>
+      <p class="text-fg-2 text-[12.5px] mt-0.5">5 active · 7 stopped in the last 24 hours</p>
+    </div>
+    <div class="flex items-center gap-3 text-[12px]">
+      <div class="flex rounded-md border border-line overflow-hidden mono">
+        <button class="px-2.5 py-1 text-fg-2">5m</button>
+        <button class="px-2.5 py-1 bg-bg-2 text-fg">15m</button>
+        <button class="px-2.5 py-1 text-fg-2">1h</button>
+        <button class="px-2.5 py-1 text-fg-2">24h</button>
+      </div>
+      <span class="vsep"></span>
+      <div class="flex rounded-md border border-line overflow-hidden">
+        <button class="px-2.5 py-1 bg-bg-2 text-fg">tiles</button>
+        <button class="px-2.5 py-1 text-fg-2">list</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ACTIVE TILES -->
+  <div class="grid grid-cols-4 gap-3">
+    <!-- TILE: luma-console — running -->
+    <article class="tile p-4" data-state="running">
+      <header class="flex items-start justify-between">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="dot bg-run breathe"></span>
+            <h3 class="mono text-[13.5px] text-fg">luma-console</h3>
+          </div>
+          <p class="mono text-[11px] text-fg-3 mt-0.5">~/work/luma/console</p>
+        </div>
+        <span class="mono text-[11px] c-run">tool · 12s</span>
+      </header>
+
+      <div class="mt-3">
+        <div class="text-[11px] text-fg-3 mono uppercase tracking-[0.12em]">in flight</div>
+        <div class="mt-1 flex items-center gap-2 text-[13px]">
+          <span class="mono c-run">Edit</span>
+          <span class="mono text-fg-1 truncate">ClientList.tsx</span>
+        </div>
+      </div>
+
+      <div class="spark mt-3" aria-hidden>
+        <span style="height:10%"></span><span style="height:18%"></span><span style="height:6%"></span>
+        <span style="height:22%"></span><span style="height:40%"></span><span style="height:14%"></span>
+        <span style="height:60%"></span><span style="height:28%"></span><span style="height:12%"></span>
+        <span style="height:46%"></span><span style="height:34%"></span><span style="height:20%"></span>
+        <span style="height:72%"></span><span style="height:52%"></span><span style="height:30%"></span>
+        <span style="height:14%"></span><span style="height:38%"></span><span style="height:24%"></span>
+        <span style="height:54%"></span><span style="height:44%"></span><span style="height:30%"></span>
+        <span style="height:70%"></span><span style="height:86%"></span><span style="height:62%"></span>
+        <span class="active" style="height:92%"></span><span class="active" style="height:78%"></span>
+      </div>
+
+      <footer class="mt-3 flex items-center justify-between text-[11px] mono text-fg-3">
+        <span>started 14:31 · 18m</span>
+        <span>1,284 ev</span>
+      </footer>
+    </article>
+
+    <!-- TILE: periscope — waiting -->
+    <article class="tile p-4" data-state="wait">
+      <header class="flex items-start justify-between">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="dot bg-attn breathe"></span>
+            <h3 class="mono text-[13.5px] text-fg">periscope</h3>
+          </div>
+          <p class="mono text-[11px] text-fg-3 mt-0.5">~/work/periscope</p>
+        </div>
+        <span class="mono text-[11px] c-attn">blocked · 42s</span>
+      </header>
+
+      <div class="mt-3">
+        <div class="text-[11px] c-attn mono uppercase tracking-[0.12em]">awaiting approval</div>
+        <div class="mt-1 flex items-center gap-2 text-[13px]">
+          <span class="mono c-attn">Bash</span>
+          <span class="mono text-fg-1 truncate">docker compose up</span>
+        </div>
+      </div>
+
+      <div class="spark mt-3" aria-hidden>
+        <span style="height:14%"></span><span style="height:28%"></span><span style="height:48%"></span>
+        <span style="height:18%"></span><span style="height:36%"></span><span style="height:62%"></span>
+        <span style="height:40%"></span><span style="height:22%"></span><span style="height:54%"></span>
+        <span style="height:68%"></span><span style="height:42%"></span><span style="height:80%"></span>
+        <span style="height:34%"></span><span style="height:50%"></span><span style="height:24%"></span>
+        <span style="height:44%"></span><span style="height:58%"></span><span style="height:30%"></span>
+        <span style="height:66%"></span><span style="height:40%"></span><span style="height:28%"></span>
+        <span style="height:52%"></span><span style="height:72%"></span><span style="height:18%"></span>
+        <span class="attn" style="height:6%"></span><span class="attn" style="height:6%"></span>
+      </div>
+
+      <footer class="mt-3 flex items-center justify-between text-[11px] mono text-fg-3">
+        <span>started 13:58 · 51m</span>
+        <span>312 ev</span>
+      </footer>
+    </article>
+
+    <!-- TILE: blazor-blueprint — 3 subagents -->
+    <article class="tile p-4" data-state="sub">
+      <header class="flex items-start justify-between">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="dot bg-sub breathe"></span>
+            <h3 class="mono text-[13.5px] text-fg">blazor-blueprint</h3>
+          </div>
+          <p class="mono text-[11px] text-fg-3 mt-0.5">~/work/blazor-blueprint</p>
+        </div>
+        <span class="mono text-[11px] c-sub">3 subs · main idle</span>
+      </header>
+
+      <div class="mt-3">
+        <div class="text-[11px] text-fg-3 mono uppercase tracking-[0.12em]">subagents</div>
+        <div class="mt-1.5 flex flex-wrap gap-1.5">
+          <span class="chip sub">builder · 8m</span>
+          <span class="chip sub">validator · 6m</span>
+          <span class="chip sub">researcher · 4m</span>
+        </div>
+      </div>
+
+      <div class="spark mt-3" aria-hidden>
+        <span style="height:20%"></span><span style="height:34%"></span><span style="height:52%"></span>
+        <span style="height:24%"></span><span style="height:40%"></span><span style="height:58%"></span>
+        <span class="sub" style="height:62%"></span><span class="sub" style="height:48%"></span><span class="sub" style="height:70%"></span>
+        <span class="sub" style="height:82%"></span><span class="sub" style="height:60%"></span><span class="sub" style="height:74%"></span>
+        <span class="sub" style="height:54%"></span><span class="sub" style="height:90%"></span><span class="sub" style="height:66%"></span>
+        <span class="sub" style="height:72%"></span><span class="err" style="height:30%"></span><span class="sub" style="height:58%"></span>
+        <span class="sub" style="height:80%"></span><span class="sub" style="height:64%"></span><span class="sub" style="height:48%"></span>
+        <span class="sub" style="height:76%"></span><span class="sub" style="height:88%"></span><span class="sub" style="height:60%"></span>
+        <span class="sub" style="height:70%"></span><span class="sub" style="height:82%"></span>
+      </div>
+
+      <footer class="mt-3 flex items-center justify-between text-[11px] mono text-fg-3">
+        <span>started 14:02 · 47m</span>
+        <span>312 ev</span>
+      </footer>
+    </article>
+
+    <!-- TILE: notes — just started -->
+    <article class="tile p-4 slide-up" data-state="running">
+      <header class="flex items-start justify-between">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="dot bg-run breathe"></span>
+            <h3 class="mono text-[13.5px] text-fg">notes</h3>
+          </div>
+          <p class="mono text-[11px] text-fg-3 mt-0.5">~/notes</p>
+        </div>
+        <span class="mono text-[11px] c-run">tool · 1s</span>
+      </header>
+
+      <div class="mt-3">
+        <div class="text-[11px] text-fg-3 mono uppercase tracking-[0.12em]">in flight</div>
+        <div class="mt-1 flex items-center gap-2 text-[13px]">
+          <span class="mono c-run">Grep</span>
+          <span class="mono text-fg-1 truncate">"TODO" src/</span>
+        </div>
+      </div>
+
+      <div class="spark mt-3" aria-hidden>
+        <span style="height:4%"></span><span style="height:4%"></span><span style="height:4%"></span>
+        <span style="height:4%"></span><span style="height:4%"></span><span style="height:4%"></span>
+        <span style="height:4%"></span><span style="height:4%"></span><span style="height:4%"></span>
+        <span style="height:4%"></span><span style="height:4%"></span><span style="height:4%"></span>
+        <span style="height:4%"></span><span style="height:4%"></span><span style="height:4%"></span>
+        <span style="height:4%"></span><span style="height:4%"></span><span style="height:4%"></span>
+        <span style="height:4%"></span><span style="height:4%"></span><span style="height:4%"></span>
+        <span style="height:4%"></span><span style="height:4%"></span><span style="height:4%"></span>
+        <span class="active" style="height:40%"></span><span class="active" style="height:58%"></span>
+      </div>
+
+      <footer class="mt-3 flex items-center justify-between text-[11px] mono text-fg-3">
+        <span>started 14:49 · 8s</span>
+        <span>3 ev</span>
+      </footer>
+    </article>
+
+    <!-- TILE: luma-api — idle -->
+    <article class="tile p-4" data-state="idle">
+      <header class="flex items-start justify-between">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="dot" style="background: var(--fg-3)"></span>
+            <h3 class="mono text-[13.5px] text-fg-1">luma-api</h3>
+          </div>
+          <p class="mono text-[11px] text-fg-3 mt-0.5">~/work/luma/api</p>
+        </div>
+        <span class="mono text-[11px] text-fg-2">idle · 4m 12s</span>
+      </header>
+
+      <div class="mt-3">
+        <div class="text-[11px] text-fg-3 mono uppercase tracking-[0.12em]">last action</div>
+        <div class="mt-1 flex items-center gap-2 text-[13px]">
+          <span class="mono text-fg-2">Read</span>
+          <span class="mono text-fg-2 truncate">package.json</span>
+        </div>
+      </div>
+
+      <div class="spark mt-3" aria-hidden>
+        <span style="height:36%"></span><span style="height:52%"></span><span style="height:24%"></span>
+        <span style="height:68%"></span><span style="height:40%"></span><span style="height:58%"></span>
+        <span style="height:74%"></span><span style="height:32%"></span><span style="height:46%"></span>
+        <span style="height:20%"></span><span style="height:4%"></span><span style="height:4%"></span>
+        <span style="height:4%"></span><span style="height:4%"></span><span style="height:4%"></span>
+        <span style="height:4%"></span><span style="height:4%"></span><span style="height:4%"></span>
+        <span style="height:4%"></span><span style="height:4%"></span><span style="height:4%"></span>
+        <span style="height:4%"></span><span style="height:4%"></span><span style="height:4%"></span>
+        <span style="height:4%"></span><span style="height:4%"></span>
+      </div>
+
+      <footer class="mt-3 flex items-center justify-between text-[11px] mono text-fg-3">
+        <span>started 14:22 · 27m</span>
+        <span>89 ev</span>
+      </footer>
+    </article>
+
+    <!-- TILE: dotfiles — idle -->
+    <article class="tile p-4" data-state="idle">
+      <header class="flex items-start justify-between">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="dot" style="background: var(--fg-3)"></span>
+            <h3 class="mono text-[13.5px] text-fg-1">dotfiles</h3>
+          </div>
+          <p class="mono text-[11px] text-fg-3 mt-0.5">~/.config/dotfiles</p>
+        </div>
+        <span class="mono text-[11px] text-fg-2">idle · 1m 48s</span>
+      </header>
+
+      <div class="mt-3">
+        <div class="text-[11px] text-fg-3 mono uppercase tracking-[0.12em]">last action</div>
+        <div class="mt-1 flex items-center gap-2 text-[13px]">
+          <span class="mono text-fg-2">Write</span>
+          <span class="mono text-fg-2 truncate">zsh/aliases.zsh</span>
+        </div>
+      </div>
+
+      <div class="spark mt-3" aria-hidden>
+        <span style="height:4%"></span><span style="height:4%"></span><span style="height:4%"></span>
+        <span style="height:4%"></span><span style="height:4%"></span><span style="height:4%"></span>
+        <span style="height:4%"></span><span style="height:4%"></span><span style="height:4%"></span>
+        <span style="height:4%"></span><span style="height:4%"></span><span style="height:4%"></span>
+        <span style="height:4%"></span><span style="height:4%"></span><span style="height:4%"></span>
+        <span style="height:22%"></span><span style="height:34%"></span><span style="height:18%"></span>
+        <span style="height:48%"></span><span style="height:12%"></span><span style="height:28%"></span>
+        <span style="height:6%"></span><span style="height:4%"></span><span style="height:4%"></span>
+        <span style="height:4%"></span><span style="height:4%"></span>
+      </div>
+
+      <footer class="mt-3 flex items-center justify-between text-[11px] mono text-fg-3">
+        <span>started 14:40 · 9m</span>
+        <span>41 ev</span>
+      </footer>
+    </article>
+
+    <!-- 2 ghost-placeholder tiles to show grid breathing room -->
+    <div class="rounded-[10px] border border-dashed border-line text-[11.5px] mono text-fg-3 flex items-center justify-center min-h-[176px]">
+      slots free — 8 more fit on this row
+    </div>
+    <div class="rounded-[10px] border border-dashed border-line text-[11.5px] mono text-fg-3 flex items-center justify-center">
+      <span>+ launch session via hook</span>
+    </div>
+  </div>
+
+  <!-- STOPPED — compact rows -->
+  <div class="mt-8 flex items-baseline gap-3 mb-2">
+    <h2 class="text-[13px] uppercase tracking-[0.12em] text-fg-3 mono">stopped</h2>
+    <div class="h-px bg-line flex-1"></div>
+    <span class="text-[11px] mono text-fg-3">7 in last 24h</span>
+  </div>
+  <div class="rounded-[10px] border border-line bg-bg-1 divide-y divide-[var(--line)] text-[12.5px]">
+    <div class="grid grid-cols-[1fr_120px_1fr_140px] items-center px-4 py-2.5">
+      <span class="mono text-fg-1">luma-keycloak-theme</span>
+      <span class="mono text-fg-3">stopped · ok</span>
+      <span class="mono text-fg-3 truncate">142 events · 18 tools · 34m 21s · last Bash "pnpm build"</span>
+      <span class="mono text-fg-3 text-right">2h 04m ago</span>
+    </div>
+    <div class="grid grid-cols-[1fr_120px_1fr_140px] items-center px-4 py-2.5">
+      <span class="mono text-fg-1">luma-api</span>
+      <span class="mono text-fg-3">stopped · ok</span>
+      <span class="mono text-fg-3 truncate">89 events · 11 tools · 12m 07s · last Edit "routes/auth.ts"</span>
+      <span class="mono text-fg-3 text-right">3h 17m ago</span>
+    </div>
+    <div class="grid grid-cols-[1fr_120px_1fr_140px] items-center px-4 py-2.5">
+      <span class="mono text-fg-1">periscope</span>
+      <span class="mono c-err">stopped · error</span>
+      <span class="mono text-fg-3 truncate"><span class="c-err">Bash exit 1</span> — sqlite3: disk I/O error (code 10) · 312 events</span>
+      <span class="mono text-fg-3 text-right">yday 22:14</span>
+    </div>
+    <div class="grid grid-cols-[1fr_120px_1fr_140px] items-center px-4 py-2.5">
+      <span class="mono text-fg-1">notes</span>
+      <span class="mono text-fg-3">stopped · ok</span>
+      <span class="mono text-fg-3 truncate">41 events · 4 tools · 6m 02s · last Write "daily/2026-04-23.md"</span>
+      <span class="mono text-fg-3 text-right">yday 19:42</span>
+    </div>
+  </div>
+</section>
+
+<!-- =========== VIEW 2 — SESSION DETAIL =========== -->
+<section class="px-6 pt-12">
+  <div class="flex items-end justify-between mb-4">
+    <div>
+      <div class="text-[11px] mono uppercase tracking-[0.14em] text-fg-3">session</div>
+      <h2 class="text-[24px] tracking-tight font-medium mt-1 flex items-center gap-3">
+        <span class="mono">blazor-blueprint</span>
+        <span class="text-[12px] c-sub mono font-normal">3 subagents active</span>
+      </h2>
+      <p class="text-fg-2 text-[12.5px] mt-0.5 mono">started 14:02:17 · 47m 12s · 312 events · claude-sonnet-4-5</p>
+    </div>
+    <div class="flex items-center gap-2 text-[12px]">
+      <div class="flex rounded-md border border-line overflow-hidden">
+        <button class="px-2.5 py-1 bg-bg-2 text-fg">timeline</button>
+        <button class="px-2.5 py-1 text-fg-2">events</button>
+        <button class="px-2.5 py-1 text-fg-2">prompts</button>
+      </div>
+      <button class="px-2.5 py-1 rounded-md border border-line text-fg-2 hover:text-fg-1">Follow now →</button>
+    </div>
+  </div>
+
+  <!-- prompt -->
+  <div class="rounded-[10px] border border-line bg-bg-1 p-4 flex gap-4 items-start mb-4">
+    <span class="text-[10.5px] mono uppercase tracking-[0.14em] text-fg-3 mt-0.5 whitespace-nowrap">user prompt</span>
+    <p class="text-[14px] text-fg leading-snug flex-1">investigate why the /hook/PreToolUse endpoint is returning 500s — check recent deploys, replay the last failing event, and propose a fix.</p>
+    <span class="text-[11px] mono text-fg-3 whitespace-nowrap">14:02:17</span>
+  </div>
+
+  <!-- split: timeline (left) + lane tiles (right) -->
+  <div class="grid grid-cols-[1fr_340px] gap-4">
+    <!-- TIMELINE -->
+    <div class="rounded-[10px] border border-line bg-bg-1 overflow-hidden">
+      <div class="px-4 py-2.5 border-b border-line flex items-center justify-between">
+        <div class="text-[11px] mono uppercase tracking-[0.12em] text-fg-3">timeline · last 45 min</div>
+        <div class="flex gap-3 text-[11px] mono text-fg-3">
+          <span><span class="dot bg-[var(--fg-4)] mr-1"></span>tool</span>
+          <span><span class="dot bg-sub mr-1"></span>subagent</span>
+          <span><span class="dot bg-err mr-1"></span>error</span>
+          <span><span class="dot bg-[var(--ok)] mr-1"></span>return</span>
+        </div>
+      </div>
+
+      <!-- ruler -->
+      <div class="relative h-6 border-b border-line">
+        <div class="absolute inset-0 flex text-[10px] mono text-fg-3 px-2">
+          <div class="flex-1 pt-1.5">14:02</div>
+          <div class="flex-1 pt-1.5">14:10</div>
+          <div class="flex-1 pt-1.5">14:18</div>
+          <div class="flex-1 pt-1.5">14:26</div>
+          <div class="flex-1 pt-1.5">14:34</div>
+          <div class="flex-1 pt-1.5">14:42</div>
+          <div class="flex-1 pt-1.5 text-right pr-1 c-run">now</div>
+        </div>
+      </div>
+
+      <!-- lanes -->
+      <div class="p-2 pr-3">
+        <!-- main -->
+        <div class="grid grid-cols-[120px_1fr] items-center py-2">
+          <div class="px-2">
+            <div class="text-[10px] mono uppercase tracking-[0.14em] text-fg-3">main</div>
+            <div class="text-[12px] mono text-fg-1 mt-0.5">agent</div>
+          </div>
+          <div class="relative h-5 bg-[#0f1317] rounded-sm">
+            <div class="absolute h-5 rounded-sm bg-[var(--fg-4)]" style="left:1%;width:3%"></div>
+            <div class="absolute h-5 rounded-sm bg-[var(--fg-4)]" style="left:5%;width:5%"></div>
+            <div class="absolute h-5 rounded-sm bg-[var(--fg-4)]" style="left:11%;width:2%"></div>
+            <div class="absolute h-5 rounded-sm bg-[var(--fg-4)]" style="left:14%;width:7%"></div>
+            <div class="absolute h-5 rounded-sm bg-[var(--fg-4)]" style="left:23%;width:3%"></div>
+            <!-- task spawn markers -->
+            <div class="absolute -bottom-1.5 w-[2px] h-8 bg-sub" style="left:22%"></div>
+            <div class="absolute -bottom-1.5 w-[2px] h-8 bg-sub" style="left:34%"></div>
+            <div class="absolute -bottom-1.5 w-[2px] h-8 bg-sub" style="left:44%"></div>
+            <div class="absolute h-5 rounded-sm bg-[var(--fg-4)]" style="left:30%;width:2%"></div>
+            <div class="absolute h-5 rounded-sm bg-[var(--fg-4)]" style="left:38%;width:2%"></div>
+            <div class="absolute h-5 rounded-sm bg-[var(--fg-4)]" style="left:48%;width:2%"></div>
+            <div class="absolute h-5 rounded-sm bg-[var(--fg-4)] opacity-60" style="left:54%;width:1%"></div>
+            <div class="absolute h-5 rounded-sm bg-[var(--fg-4)] opacity-60" style="left:68%;width:1%"></div>
+            <div class="absolute h-5 rounded-sm bg-[var(--fg-4)]" style="left:88%;width:2%"></div>
+          </div>
+        </div>
+
+        <!-- builder -->
+        <div class="grid grid-cols-[120px_1fr] items-center py-1">
+          <div class="px-2 pl-4">
+            <div class="text-[10px] mono uppercase tracking-[0.14em] c-sub">sub</div>
+            <div class="text-[12px] mono text-fg-1 mt-0.5">builder</div>
+          </div>
+          <div class="relative h-4 bg-[#0f1317] rounded-sm">
+            <div class="absolute h-4 rounded-sm bg-sub opacity-80" style="left:22%;width:4%"></div>
+            <div class="absolute h-4 rounded-sm bg-sub opacity-80" style="left:27%;width:8%"></div>
+            <div class="absolute h-4 rounded-sm bg-sub opacity-80" style="left:36%;width:4%"></div>
+            <div class="absolute h-4 rounded-sm bg-sub opacity-80" style="left:42%;width:10%"></div>
+            <div class="absolute h-4 rounded-sm bg-sub opacity-80" style="left:54%;width:4%"></div>
+            <div class="absolute h-4 rounded-sm bg-sub opacity-80" style="left:60%;width:14%"></div>
+            <div class="absolute h-4 rounded-sm bg-sub opacity-80" style="left:76%;width:6%"></div>
+            <div class="absolute h-4 rounded-sm bg-sub" style="left:84%;width:14%"></div>
+          </div>
+        </div>
+
+        <!-- validator -->
+        <div class="grid grid-cols-[120px_1fr] items-center py-1">
+          <div class="px-2 pl-4">
+            <div class="text-[10px] mono uppercase tracking-[0.14em] c-sub">sub</div>
+            <div class="text-[12px] mono text-fg-1 mt-0.5">validator</div>
+          </div>
+          <div class="relative h-4 bg-[#0f1317] rounded-sm">
+            <div class="absolute h-4 rounded-sm bg-sub opacity-80" style="left:34%;width:2%"></div>
+            <div class="absolute h-4 rounded-sm bg-sub opacity-80" style="left:37%;width:6%"></div>
+            <div class="absolute h-4 rounded-sm bg-sub opacity-80" style="left:44%;width:9%"></div>
+            <div class="absolute h-4 rounded-sm bg-sub opacity-80" style="left:54%;width:2%"></div>
+            <div class="absolute h-4 rounded-sm bg-err" style="left:58%;width:3%"></div>
+            <div class="absolute h-4 rounded-sm bg-sub opacity-80" style="left:64%;width:4%"></div>
+            <div class="absolute h-4 rounded-sm bg-sub opacity-80" style="left:70%;width:10%"></div>
+            <div class="absolute h-4 rounded-sm bg-sub" style="left:82%;width:16%"></div>
+          </div>
+        </div>
+
+        <!-- researcher -->
+        <div class="grid grid-cols-[120px_1fr] items-center py-1">
+          <div class="px-2 pl-4">
+            <div class="text-[10px] mono uppercase tracking-[0.14em] c-sub">sub</div>
+            <div class="text-[12px] mono text-fg-1 mt-0.5">researcher</div>
+          </div>
+          <div class="relative h-4 bg-[#0f1317] rounded-sm">
+            <div class="absolute h-4 rounded-sm bg-sub opacity-70" style="left:44%;width:4%"></div>
+            <div class="absolute h-4 rounded-sm bg-sub opacity-70" style="left:50%;width:12%"></div>
+            <div class="absolute h-4 rounded-sm bg-sub opacity-70" style="left:64%;width:3%"></div>
+            <div class="absolute h-4 rounded-sm bg-sub opacity-70" style="left:70%;width:16%"></div>
+            <div class="absolute h-4 rounded-sm bg-sub" style="left:88%;width:10%"></div>
+          </div>
+        </div>
+
+        <!-- test-writer — completed -->
+        <div class="grid grid-cols-[120px_1fr] items-center py-1">
+          <div class="px-2 pl-4">
+            <div class="text-[10px] mono uppercase tracking-[0.14em] text-fg-3">sub · done</div>
+            <div class="text-[12px] mono text-fg-2 mt-0.5">test-writer</div>
+          </div>
+          <div class="relative h-4 bg-[#0f1317] rounded-sm">
+            <div class="absolute h-4 rounded-sm bg-[var(--fg-4)]" style="left:22%;width:3%"></div>
+            <div class="absolute h-4 rounded-sm bg-[var(--fg-4)]" style="left:26%;width:6%"></div>
+            <div class="absolute h-4 rounded-sm bg-[var(--fg-4)]" style="left:33%;width:2%"></div>
+            <div class="absolute h-4 rounded-sm bg-[var(--fg-4)]" style="left:36%;width:4%"></div>
+            <div class="absolute -top-[3px] w-[3px] h-[22px] rounded-sm" style="background: var(--ok); left: 41%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- LANE DETAIL (right) -->
+    <div class="space-y-3">
+      <!-- summary -->
+      <div class="rounded-[10px] border border-line bg-bg-1 p-4">
+        <div class="text-[11px] mono uppercase tracking-[0.12em] text-fg-3 mb-2">summary</div>
+        <dl class="text-[12.5px] mono grid grid-cols-2 gap-y-1.5">
+          <dt class="text-fg-3">state</dt><dd class="c-sub">3 subagents</dd>
+          <dt class="text-fg-3">events</dt><dd>312</dd>
+          <dt class="text-fg-3">errors</dt><dd><span class="c-err">1</span> · Bash exit 1</dd>
+          <dt class="text-fg-3">tokens</dt><dd>418K / 81K</dd>
+          <dt class="text-fg-3">model</dt><dd>sonnet-4-5</dd>
+          <dt class="text-fg-3">duration</dt><dd>47m 12s</dd>
+        </dl>
+        <div class="mt-3 pt-3 border-t border-line text-[11px] mono text-fg-3">
+          tool mix
+          <div class="flex gap-0.5 mt-1.5 h-2 rounded overflow-hidden">
+            <div style="width:44%;background:var(--fg-4)" title="Read 41"></div>
+            <div style="width:15%;background:var(--sub-dim)" title="Edit 14"></div>
+            <div style="width:24%;background:var(--run-dim)" title="Bash 22"></div>
+            <div style="width:10%;background:var(--fg-4);filter:brightness(1.3)" title="Grep 9"></div>
+            <div style="width:7%;background:var(--attn-dim)" title="WebFetch 6"></div>
+          </div>
+          <div class="flex gap-3 mt-1.5 text-fg-2">
+            <span>Read 41</span><span>Edit 14</span><span>Bash 22</span><span>Grep 9</span><span>Web 6</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- recent events compact -->
+      <div class="rounded-[10px] border border-line bg-bg-1">
+        <div class="px-4 py-2.5 border-b border-line flex items-center justify-between">
+          <div class="text-[11px] mono uppercase tracking-[0.12em] text-fg-3">recent</div>
+          <span class="text-[11px] mono c-run"><span class="dot bg-run breathe mr-1"></span>live</span>
+        </div>
+        <ul class="text-[12px] mono divide-y divide-[var(--line)]">
+          <li class="px-3 py-1.5 flex gap-2 slide-up">
+            <span class="text-fg-3">49:29</span>
+            <span class="c-sub">builder</span>
+            <span class="c-run truncate">Bash dotnet test</span>
+          </li>
+          <li class="px-3 py-1.5 flex gap-2">
+            <span class="text-fg-3">49:21</span>
+            <span class="c-sub">validator</span>
+            <span class="text-fg-1 truncate">replay 41df2 ok</span>
+          </li>
+          <li class="px-3 py-1.5 flex gap-2">
+            <span class="text-fg-3">49:09</span>
+            <span class="c-sub">builder</span>
+            <span class="text-fg-1 truncate">Edit PreToolUse.cs</span>
+          </li>
+          <li class="px-3 py-1.5 flex gap-2">
+            <span class="text-fg-3">48:47</span>
+            <span class="c-sub">validator</span>
+            <span class="c-err truncate">Bash exit 1 — NRE</span>
+          </li>
+          <li class="px-3 py-1.5 flex gap-2">
+            <span class="text-fg-3">48:31</span>
+            <span class="c-sub">researcher</span>
+            <span class="text-fg-1 truncate">WebFetch learn.ms</span>
+          </li>
+          <li class="px-3 py-1.5 flex gap-2">
+            <span class="text-fg-3">48:12</span>
+            <span class="text-fg-2">main</span>
+            <span class="c-sub truncate">Task → researcher</span>
+          </li>
+          <li class="px-3 py-1.5 flex gap-2">
+            <span class="text-fg-3">47:22</span>
+            <span class="text-fg-2">test-writer</span>
+            <span class="c-ok truncate">returned · 6 tools</span>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- =========== PALETTE =========== -->
+<section class="px-6 py-12 mt-10 border-t border-line">
+  <div class="flex items-start justify-between gap-10">
+    <div class="max-w-[600px]">
+      <div class="text-[11px] mono uppercase tracking-[0.14em] text-fg-3">direction 03</div>
+      <h3 class="text-[28px] tracking-tight font-medium mt-1">Grid</h3>
+      <p class="text-fg-1 text-[13px] leading-relaxed mt-2">
+        Each session is a small, self-contained <span class="text-fg">dense tile</span> with a 15-minute activity sparkline. Ten of them fit on a 1440 monitor without collapsing — the 10-session worst-case is comfortable, not compressed. State is communicated by a top edge-color on the tile (cyan / lavender / amber) and a single breathing status dot; the sparkline shows recent shape so you can see a session's rhythm at a glance. Session detail drops into a familiar lane timeline + a right rail of summary numbers. The closest reference is <span class="text-fg">small multiples from a statistics textbook</span> — many units, one grammar.
+      </p>
+    </div>
+    <div class="grid grid-cols-5 gap-3 min-w-[520px]">
+      <div class="text-[11px] mono">
+        <div class="h-10 rounded" style="background: var(--bg)"></div>
+        <div class="mt-1 text-fg-2">bg / #0c0d10</div><div class="text-fg-3">canvas</div>
+      </div>
+      <div class="text-[11px] mono">
+        <div class="h-10 rounded" style="background: var(--bg-1)"></div>
+        <div class="mt-1 text-fg-2">tile / #111317</div><div class="text-fg-3">surface</div>
+      </div>
+      <div class="text-[11px] mono">
+        <div class="h-10 rounded" style="background: var(--run)"></div>
+        <div class="mt-1 text-fg-2">run / blue</div><div class="text-fg-3">tool running</div>
+      </div>
+      <div class="text-[11px] mono">
+        <div class="h-10 rounded" style="background: var(--sub)"></div>
+        <div class="mt-1 text-fg-2">sub / lavender</div><div class="text-fg-3">subagent</div>
+      </div>
+      <div class="text-[11px] mono">
+        <div class="h-10 rounded" style="background: var(--attn)"></div>
+        <div class="mt-1 text-fg-2">attn / amber</div><div class="text-fg-3">awaiting</div>
+      </div>
+      <div class="text-[11px] mono">
+        <div class="h-10 rounded" style="background: var(--err)"></div>
+        <div class="mt-1 text-fg-2">err / coral</div><div class="text-fg-3">exit ≠ 0</div>
+      </div>
+      <div class="text-[11px] mono">
+        <div class="h-10 rounded" style="background: var(--ok)"></div>
+        <div class="mt-1 text-fg-2">ok / moss</div><div class="text-fg-3">returned</div>
+      </div>
+      <div class="text-[11px] mono">
+        <div class="h-10 rounded" style="background: var(--fg-4)"></div>
+        <div class="mt-1 text-fg-2">past / graphite</div><div class="text-fg-3">history</div>
+      </div>
+      <div class="text-[11px] mono">
+        <div class="h-10 rounded" style="background: var(--fg)"></div>
+        <div class="mt-1 text-fg-2">fg / #e5e8ee</div><div class="text-fg-3">primary</div>
+      </div>
+      <div class="text-[11px] mono">
+        <div class="h-10 rounded" style="background: var(--fg-2)"></div>
+        <div class="mt-1 text-fg-2">fg-2 / #7b8290</div><div class="text-fg-3">secondary</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>

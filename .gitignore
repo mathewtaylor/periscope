@@ -1,0 +1,21 @@
+node_modules/
+*.log
+.DS_Store
+
+# Local Claude Code settings (per-user, may contain paths/secrets)
+.claude/
+
+# SQLite
+/data/
+*.db
+*.db-wal
+*.db-shm
+
+# Vite/web
+web/dist/
+web/node_modules/
+.vite/
+
+# Env
+.env
+.env.local

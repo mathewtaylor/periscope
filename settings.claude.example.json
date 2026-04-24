@@ -1,0 +1,15 @@
+{
+  "_comment": "Copy the 'hooks' block into ~/.claude/settings.json. Replace <host> with the machine running Periscope (localhost, Tailscale hostname, etc). After editing, run /hooks inside Claude Code once to approve the new HTTP hooks.",
+  "hooks": {
+    "SessionStart":     [{ "hooks": [{ "type": "http", "url": "http://<host>:5050/hook/SessionStart" }] }],
+    "SessionEnd":       [{ "hooks": [{ "type": "http", "url": "http://<host>:5050/hook/SessionEnd" }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "http", "url": "http://<host>:5050/hook/UserPromptSubmit" }] }],
+    "PreToolUse":       [{ "matcher": "*", "hooks": [{ "type": "http", "url": "http://<host>:5050/hook/PreToolUse" }] }],
+    "PostToolUse":      [{ "matcher": "*", "hooks": [{ "type": "http", "url": "http://<host>:5050/hook/PostToolUse" }] }],
+    "SubagentStart":    [{ "hooks": [{ "type": "http", "url": "http://<host>:5050/hook/SubagentStart" }] }],
+    "SubagentStop":     [{ "hooks": [{ "type": "http", "url": "http://<host>:5050/hook/SubagentStop" }] }],
+    "Notification":     [{ "hooks": [{ "type": "http", "url": "http://<host>:5050/hook/Notification" }] }],
+    "Stop":             [{ "hooks": [{ "type": "http", "url": "http://<host>:5050/hook/Stop" }] }],
+    "PreCompact":       [{ "hooks": [{ "type": "http", "url": "http://<host>:5050/hook/PreCompact" }] }]
+  }
+}
