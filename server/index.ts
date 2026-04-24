@@ -34,11 +34,15 @@ const WEB_DIST = process.env.WEB_DIST ?? "./web/dist";
 const staticEnabled = existsSync(WEB_DIST);
 
 if (staticEnabled) {
+  // Hono's serveStatic treats `path` as a URL-style string (leading slash is
+  // stripped, then joined to `root`). Passing absolute filesystem paths via
+  // `path` breaks: it becomes relative and Bun.file resolves it from cwd.
+  // Always pass the file basename via `path` + the dist dir via `root`.
   app.use("/assets/*", serveStatic({ root: WEB_DIST }));
-  app.get("/favicon.svg", serveStatic({ path: `${WEB_DIST}/favicon.svg` }));
-  app.get("/favicon.ico", serveStatic({ path: `${WEB_DIST}/favicon.svg` }));
+  app.get("/favicon.svg", serveStatic({ path: "favicon.svg", root: WEB_DIST }));
+  app.get("/favicon.ico", serveStatic({ path: "favicon.svg", root: WEB_DIST }));
   // SPA fallback — any unmatched GET returns index.html so the Vue router handles it.
-  app.get("*", serveStatic({ path: `${WEB_DIST}/index.html` }));
+  app.get("*", serveStatic({ path: "index.html", root: WEB_DIST }));
   console.log(`[periscope] serving SPA from ${WEB_DIST}`);
 } else {
   app.get("/", (c) =>
