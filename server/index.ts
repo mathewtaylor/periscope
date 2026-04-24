@@ -35,7 +35,8 @@ const staticEnabled = existsSync(WEB_DIST);
 
 if (staticEnabled) {
   app.use("/assets/*", serveStatic({ root: WEB_DIST }));
-  app.get("/favicon.ico", serveStatic({ path: `${WEB_DIST}/favicon.ico` }));
+  app.get("/favicon.svg", serveStatic({ path: `${WEB_DIST}/favicon.svg` }));
+  app.get("/favicon.ico", serveStatic({ path: `${WEB_DIST}/favicon.svg` }));
   // SPA fallback — any unmatched GET returns index.html so the Vue router handles it.
   app.get("*", serveStatic({ path: `${WEB_DIST}/index.html` }));
   console.log(`[periscope] serving SPA from ${WEB_DIST}`);

@@ -2,6 +2,10 @@ import { defineConfig } from "vite";
 import vue from "@vitejs/plugin-vue";
 import path from "node:path";
 
+const WEB_PORT = Number.parseInt(process.env.WEB_PORT ?? "5173", 10);
+const API_URL = process.env.API_URL ?? "http://localhost:5050";
+const API_URL_WS = API_URL.replace(/^http/, "ws");
+
 export default defineConfig({
   plugins: [vue()],
   resolve: {
@@ -10,12 +14,13 @@ export default defineConfig({
     },
   },
   server: {
-    port: 5173,
+    port: WEB_PORT,
+    strictPort: false,
     proxy: {
-      "/api": "http://localhost:5050",
-      "/ws": { target: "ws://localhost:5050", ws: true },
-      "/hook": "http://localhost:5050",
-      "/health": "http://localhost:5050",
+      "/api": API_URL,
+      "/ws": { target: API_URL_WS, ws: true },
+      "/hook": API_URL,
+      "/health": API_URL,
     },
   },
   build: {

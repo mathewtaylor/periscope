@@ -1,15 +1,20 @@
 services:
   periscope:
-    build: .
-    image: periscope:latest
+    # Pull the pre-built multi-arch image from GHCR. To build locally from
+    # this checkout instead, comment the `image:` line below and uncomment
+    # `build: .`.
+    image: ghcr.io/mathewtaylor/periscope:latest
+    # build: .
     container_name: periscope
     restart: unless-stopped
     ports:
-      - "5050:5050"
+      # Host port is configurable via PERISCOPE_HOST_PORT; container always
+      # listens on the port set by the PORT env var (default 5050).
+      - "${PERISCOPE_HOST_PORT:-5050}:${PORT:-5050}"
     volumes:
       - periscope-data:/data
     environment:
-      PORT: "5050"
+      PORT: "${PORT:-5050}"
       DB_PATH: "/data/events.db"
 
 volumes:

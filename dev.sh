@@ -1,17 +1,29 @@
 #!/usr/bin/env bash
 # Periscope — local dev launcher.
 #
-# Starts the Bun API/WS server on :5050 and the Vite dev server on :5173
-# in one command, installs deps on first run, and tears down both processes
-# cleanly on Ctrl+C.
+# Starts the Bun API/WS server and the Vite dev server in one command,
+# installs deps on first run, and tears down both processes cleanly on
+# Ctrl+C. Open the Vite URL (WEB_PORT) in your browser.
 #
-# Open http://localhost:5173 once both are up.
+# Override any port via env, e.g.:
+#   PORT=5080 WEB_PORT=5180 ./dev.sh
 
 set -euo pipefail
 
 cd "$(dirname "$0")"
 
-# Make sure bun is on PATH.
+# Load .env if present so ports etc. override defaults without extra flags.
+if [ -f .env ]; then
+  set -a
+  # shellcheck disable=SC1091
+  . ./.env
+  set +a
+fi
+
+export PORT="${PORT:-5050}"
+export WEB_PORT="${WEB_PORT:-5173}"
+export API_URL="${API_URL:-http://localhost:${PORT}}"
+
 if ! command -v bun >/dev/null 2>&1; then
   echo "error: bun not found on PATH. Install from https://bun.sh" >&2
   exit 1
@@ -40,26 +52,23 @@ cleanup() {
 }
 trap cleanup INT TERM
 
-cat <<'BANNER'
+cat <<BANNER
 
 ┌──────────────────────────────────────────────────┐
 │  Periscope dev                                   │
-│    API + WS       http://localhost:5050          │
-│    Dashboard      http://localhost:5173  ← open  │
+│    API + WS       http://localhost:${PORT}          $(printf '%*s' $((5 - ${#PORT})) '')│
+│    Dashboard      http://localhost:${WEB_PORT}  ← open $(printf '%*s' $((5 - ${#WEB_PORT})) '')│
 │                                                  │
 │  Ctrl+C to stop both.                            │
 └──────────────────────────────────────────────────┘
 
 BANNER
 
-# Backend (API + WS + raw SPA fallback). --watch auto-restarts on server edits.
 bun run dev &
 API_PID=$!
 
-# Vite dev server with HMR. /api and /ws are proxied to :5050 via vite.config.
 bun run dev:web &
 WEB_PID=$!
 
-# If either process exits, tear the other down too.
 wait -n 2>/dev/null || true
 cleanup

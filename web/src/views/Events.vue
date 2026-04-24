@@ -399,7 +399,7 @@ function statusPillClass(
       class="rounded-tile border border-line bg-bg-1"
     >
       <div
-        class="grid grid-cols-[80px_140px_80px_1fr_80px] items-center border-b border-line px-4 py-2 font-mono uppercase tracking-[0.12em] text-[10.5px] text-fg-3"
+        class="grid grid-cols-[80px_140px_80px_1fr_80px] items-center gap-x-3 border-b border-line px-4 py-2 font-mono uppercase tracking-[0.12em] text-[10.5px] text-fg-3"
       >
         <span>time</span>
         <span>project</span>
