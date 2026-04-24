@@ -242,13 +242,29 @@ Two paths — pick based on whether you want tokens / git context / hostname on 
 
 The relay is a small Bun script that runs on each Claude Code machine. It enriches every hook payload with local-only context — hostname, git branch/commit/dirty, cumulative token counts, and a current-turn context-window snapshot — then forwards to the collector. Without it those columns stay blank.
 
+**One-liner install** (no repo clone needed):
+
 ```bash
 # On every machine running Claude Code:
-git clone https://github.com/mathewtaylor/periscope && cd periscope
-./install-relay.sh                        # → ~/.local/bin/periscope-relay.ts
-#   (pass --path <dir> to override, --print to dry-run)
+curl -fsSL https://bun.sh/install | bash                       # skip if you already have bun
+curl -fsSL https://raw.githubusercontent.com/mathewtaylor/periscope/main/install-relay.sh | bash
 
-export PERISCOPE_URL=http://<host>:5050   # add to your shell profile
+export PERISCOPE_URL=http://<collector-host>:5050              # add to your shell profile
+```
+
+The installer self-fetches the relay from GitHub, drops it at `~/.local/bin/periscope-relay.ts`, and prints the exact `bun <path>` line to paste into your hook config. Pass flags via `-s --`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mathewtaylor/periscope/main/install-relay.sh | bash -s -- --path /opt/periscope --ref v1.0.0
+```
+
+Flags: `--path <dir>` (install location), `--ref <branch|tag|sha>` (pin to a specific version), `--print` (dry-run).
+
+**From a repo clone** (same script, local mode):
+
+```bash
+git clone https://github.com/mathewtaylor/periscope && cd periscope
+./install-relay.sh
 ```
 
 Then open the dashboard's `Config` tab → copy the `"type": "command"` JSON block (with your live host + relay path baked in) → paste into `~/.claude/settings.json` → run `/hooks` inside Claude Code to approve.
