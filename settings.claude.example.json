@@ -1,19 +1,19 @@
 {
-  "_comment": "Copy the 'hooks' block into ~/.claude/settings.json (or your project's .claude/settings.json). Replace <PATH_TO_RELAY> with the absolute path to the folder holding periscope-relay.ts. Each hook runs the local relay, which enriches the payload (hostname, git, token counts) and POSTs it to the Periscope collector. Remove any event lines you don't want captured. After editing, run /hooks inside Claude Code once to approve the new command hooks.",
+  "_comment": "Copy the 'hooks' block into ~/.claude/settings.json (or your project's .claude/settings.json). Replace <PATH_TO_RELAY> with the absolute path to the folder holding periscope-relay.ts — e.g. /Users/you/.local/bin on macOS/Linux or C:/Users/you/.local/bin on Windows. Each hook runs the local relay, which enriches the payload (hostname, git, token counts) and POSTs it to the Periscope collector. Remove any event lines you don't want captured. After editing, run /hooks inside Claude Code once to approve the new command hooks.",
   "hooks": {
-    "SessionStart":       [{ "hooks": [{ "type": "command", "command": "bun /c/Users/mathe/.local/bin/periscope-relay.ts" }] }],
-    "SessionEnd":         [{ "hooks": [{ "type": "command", "command": "bun /c/Users/mathe/.local/bin/periscope-relay.ts" }] }],
-    "UserPromptSubmit":   [{ "hooks": [{ "type": "command", "command": "bun /c/Users/mathe/.local/bin/periscope-relay.ts" }] }],
-    "PreToolUse":         [{ "matcher": "*", "hooks": [{ "type": "command", "command": "bun /c/Users/mathe/.local/bin/periscope-relay.ts" }] }],
-    "PostToolUse":        [{ "matcher": "*", "hooks": [{ "type": "command", "command": "bun /c/Users/mathe/.local/bin/periscope-relay.ts" }] }],
-    "PostToolUseFailure": [{ "matcher": "*", "hooks": [{ "type": "command", "command": "bun /c/Users/mathe/.local/bin/periscope-relay.ts" }] }],
-    "PermissionDenied":   [{ "hooks": [{ "type": "command", "command": "bun /c/Users/mathe/.local/bin/periscope-relay.ts" }] }],
-    "SubagentStart":      [{ "hooks": [{ "type": "command", "command": "bun /c/Users/mathe/.local/bin/periscope-relay.ts" }] }],
-    "SubagentStop":       [{ "hooks": [{ "type": "command", "command": "bun /c/Users/mathe/.local/bin/periscope-relay.ts" }] }],
-    "Notification":       [{ "hooks": [{ "type": "command", "command": "bun /c/Users/mathe/.local/bin/periscope-relay.ts" }] }],
-    "Stop":               [{ "hooks": [{ "type": "command", "command": "bun /c/Users/mathe/.local/bin/periscope-relay.ts" }] }],
-    "StopFailure":        [{ "hooks": [{ "type": "command", "command": "bun /c/Users/mathe/.local/bin/periscope-relay.ts" }] }],
-    "PreCompact":         [{ "hooks": [{ "type": "command", "command": "bun /c/Users/mathe/.local/bin/periscope-relay.ts" }] }]
+    "SessionStart":       [{ "hooks": [{ "type": "command", "command": "bun <PATH_TO_RELAY>/periscope-relay.ts" }] }],
+    "SessionEnd":         [{ "hooks": [{ "type": "command", "command": "bun <PATH_TO_RELAY>/periscope-relay.ts" }] }],
+    "UserPromptSubmit":   [{ "hooks": [{ "type": "command", "command": "bun <PATH_TO_RELAY>/periscope-relay.ts" }] }],
+    "PreToolUse":         [{ "matcher": "*", "hooks": [{ "type": "command", "command": "bun <PATH_TO_RELAY>/periscope-relay.ts" }] }],
+    "PostToolUse":        [{ "matcher": "*", "hooks": [{ "type": "command", "command": "bun <PATH_TO_RELAY>/periscope-relay.ts" }] }],
+    "PostToolUseFailure": [{ "matcher": "*", "hooks": [{ "type": "command", "command": "bun <PATH_TO_RELAY>/periscope-relay.ts" }] }],
+    "PermissionDenied":   [{ "hooks": [{ "type": "command", "command": "bun <PATH_TO_RELAY>/periscope-relay.ts" }] }],
+    "SubagentStart":      [{ "hooks": [{ "type": "command", "command": "bun <PATH_TO_RELAY>/periscope-relay.ts" }] }],
+    "SubagentStop":       [{ "hooks": [{ "type": "command", "command": "bun <PATH_TO_RELAY>/periscope-relay.ts" }] }],
+    "Notification":       [{ "hooks": [{ "type": "command", "command": "bun <PATH_TO_RELAY>/periscope-relay.ts" }] }],
+    "Stop":               [{ "hooks": [{ "type": "command", "command": "bun <PATH_TO_RELAY>/periscope-relay.ts" }] }],
+    "StopFailure":        [{ "hooks": [{ "type": "command", "command": "bun <PATH_TO_RELAY>/periscope-relay.ts" }] }],
+    "PreCompact":         [{ "hooks": [{ "type": "command", "command": "bun <PATH_TO_RELAY>/periscope-relay.ts" }] }]
   },
   "_comment_env": "Set PERISCOPE_URL to target a non-localhost collector, e.g. PERISCOPE_URL=http://tailnet-host:5050. Defaults to http://localhost:5050 when unset."
 }
