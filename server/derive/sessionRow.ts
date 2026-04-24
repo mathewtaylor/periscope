@@ -26,6 +26,12 @@ export interface LastTool {
   target: string;
 }
 
+export interface GitInfo {
+  branch: string;
+  commit: string;
+  dirty: boolean;
+}
+
 export interface SessionRow {
   session_id: string;
   project: string;
@@ -45,6 +51,8 @@ export interface SessionRow {
   model?: string;
   permission_mode: string | null;
   source: string | null;
+  machine_host: string | null;
+  git: GitInfo | null;
 }
 
 const GENERIC_LEAF_NAMES = new Set([
@@ -183,16 +191,28 @@ export function buildSessionRow(
     }
   }
 
-  // Model from SessionStart
-  let model: string | undefined;
+  // Source comes from SessionStart only (it's a lifecycle field).
   let source: string | null = null;
   const sessionStart = events.find((e) => e.event === "SessionStart");
   if (sessionStart) {
     const payload = parsePayload(sessionStart.payload);
-    const m = payload?.model;
-    if (typeof m === "string") model = m;
     const src = payload?.source;
     if (typeof src === "string") source = src;
+  }
+
+  // Model — latest-wins across any event that carries it. Claude Code's
+  // SessionStart sometimes omits `model` (notably on `source: resume`);
+  // the enrichment relay backfills `model` at the payload root from the
+  // transcript's latest assistant message, so we scan every event.
+  let model: string | undefined;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!;
+    const payload = parsePayload(e.payload);
+    const m = payload?.model;
+    if (typeof m === "string" && m.length > 0) {
+      model = m;
+      break;
+    }
   }
 
   // permission_mode from the latest event payload that carries one (non-default).
@@ -204,6 +224,39 @@ export function buildSessionRow(
     if (typeof pm === "string" && pm.length > 0) {
       if (pm !== "default") permissionMode = pm;
       break;
+    }
+  }
+
+  // machine_host from the latest event that carries a machine block.
+  let machineHost: string | null = null;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!;
+    const payload = parsePayload(e.payload);
+    const machine = payload?.machine;
+    if (machine && typeof machine === "object") {
+      const host = (machine as Record<string, unknown>).host;
+      if (typeof host === "string" && host.length > 0) {
+        machineHost = host;
+        break;
+      }
+    }
+  }
+
+  // git from the latest event that carries a git block (optional per event).
+  let git: GitInfo | null = null;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!;
+    const payload = parsePayload(e.payload);
+    const g = payload?.git;
+    if (g && typeof g === "object") {
+      const obj = g as Record<string, unknown>;
+      const branch = typeof obj.branch === "string" ? obj.branch : null;
+      const commit = typeof obj.commit === "string" ? obj.commit : null;
+      const dirty = typeof obj.dirty === "boolean" ? obj.dirty : null;
+      if (branch !== null && commit !== null && dirty !== null) {
+        git = { branch, commit, dirty };
+        break;
+      }
     }
   }
 
@@ -272,6 +325,8 @@ export function buildSessionRow(
     model,
     permission_mode: permissionMode,
     source,
+    machine_host: machineHost,
+    git,
   };
 }
 

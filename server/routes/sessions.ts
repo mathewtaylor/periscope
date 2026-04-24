@@ -12,6 +12,86 @@ import {
   parseWindow as parseWindowLabel,
 } from "../derive/sparkline.ts";
 import { deriveToolMix } from "../derive/toolMix.ts";
+import { contextLimit } from "../derive/contextLimits.ts";
+
+interface Tokens {
+  input: number;
+  output: number;
+  cached: number;
+}
+
+interface ContextInfo {
+  used: number;
+  limit: number;
+  remaining_pct: number;
+}
+
+interface AgentContext {
+  agent_id: string;
+  agent_type: string;
+  tokens: Tokens;
+  context: ContextInfo | null;
+}
+
+interface ContextTokens {
+  input: number;
+  cache_read: number;
+  cache_creation: number;
+}
+
+function parseTokens(value: unknown): Tokens | null {
+  if (!value || typeof value !== "object") return null;
+  const obj = value as Record<string, unknown>;
+  const input = obj.input;
+  const output = obj.output;
+  const cached = obj.cached;
+  if (
+    typeof input !== "number" ||
+    typeof output !== "number" ||
+    typeof cached !== "number"
+  ) {
+    return null;
+  }
+  return { input, output, cached };
+}
+
+function parseContextTokens(value: unknown): ContextTokens | null {
+  if (!value || typeof value !== "object") return null;
+  const obj = value as Record<string, unknown>;
+  const input = obj.input;
+  const cacheRead = obj.cache_read;
+  const cacheCreation = obj.cache_creation;
+  if (
+    typeof input !== "number" ||
+    typeof cacheRead !== "number" ||
+    typeof cacheCreation !== "number"
+  ) {
+    return null;
+  }
+  return { input, cache_read: cacheRead, cache_creation: cacheCreation };
+}
+
+// Compute context occupancy from the LATEST assistant message's usage, not
+// cumulative totals. Summing `input_tokens` across the whole transcript
+// double-counts every retained turn and breaks immediately after /clear or
+// /compact. The per-turn input already reflects the active window because
+// the API only includes what's currently in it.
+function computeContext(
+  ctx: ContextTokens | null,
+  model: string | null,
+): ContextInfo | null {
+  if (!ctx) return null;
+  const limit = contextLimit(model);
+  if (!limit || limit <= 0) return null;
+  const used = ctx.input + ctx.cache_read + ctx.cache_creation;
+  const remaining = Math.max(0, limit - used);
+  const remainingPct = Math.max(0, Math.min(100, (remaining / limit) * 100));
+  return {
+    used,
+    limit,
+    remaining_pct: Math.round(remainingPct),
+  };
+}
 
 const app = new Hono();
 
@@ -193,15 +273,84 @@ app.get("/sessions/:id/summary", (c) => {
     break;
   }
 
+  // Latest main-thread enrichment — walk newest→oldest once and capture both
+  // the cumulative `tokens` block and the current-window `context_tokens`
+  // block. Either may be missing if the relay isn't installed or the
+  // transcript has no usage data yet.
+  let tokens: Tokens | null = null;
+  let contextTokens: ContextTokens | null = null;
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!;
+    try {
+      const parsed = JSON.parse(e.payload) as {
+        tokens?: unknown;
+        context_tokens?: unknown;
+      };
+      if (!tokens) {
+        const t = parseTokens(parsed.tokens);
+        if (t) tokens = t;
+      }
+      if (!contextTokens) {
+        const c = parseContextTokens(parsed.context_tokens);
+        if (c) contextTokens = c;
+      }
+      if (tokens && contextTokens) break;
+    } catch {
+      // ignore malformed payload
+    }
+  }
+  const model = session.model ?? null;
+  const context = computeContext(contextTokens, model);
+
+  // Per-agent latest tokens + context, grouped by agent_id.
+  const agentLatest = new Map<
+    string,
+    { agent_type: string; tokens: Tokens; context_tokens: ContextTokens | null }
+  >();
+  for (let i = events.length - 1; i >= 0; i--) {
+    const e = events[i]!;
+    if (!e.agent_id) continue;
+    const existing = agentLatest.get(e.agent_id);
+    if (existing && existing.context_tokens) continue;
+    try {
+      const parsed = JSON.parse(e.payload) as {
+        agent_tokens?: unknown;
+        agent_context_tokens?: unknown;
+      };
+      const t = parseTokens(parsed.agent_tokens);
+      const ct = parseContextTokens(parsed.agent_context_tokens);
+      if (!existing && t) {
+        agentLatest.set(e.agent_id, {
+          agent_type: e.agent_type ?? "",
+          tokens: t,
+          context_tokens: ct,
+        });
+      } else if (existing && !existing.context_tokens && ct) {
+        existing.context_tokens = ct;
+      }
+    } catch {
+      // ignore malformed payload
+    }
+  }
+  const agentContexts: AgentContext[] = [...agentLatest.entries()].map(
+    ([agent_id, v]) => ({
+      agent_id,
+      agent_type: v.agent_type,
+      tokens: v.tokens,
+      context: computeContext(v.context_tokens, model),
+    }),
+  );
+
   return c.json({
-    // tokens: null — hooks do not carry token counts in v1 (see plan §1 and §13)
-    tokens: null,
-    model: session.model ?? null,
+    tokens,
+    model,
     duration_ms: session.duration_ms,
     event_count: session.event_count,
     error_count: errorCount,
     tool_mix: toolMix,
     stop_failure: stopFailure,
+    context,
+    agent_contexts: agentContexts,
   });
 });
 

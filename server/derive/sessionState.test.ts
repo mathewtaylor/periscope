@@ -113,6 +113,18 @@ describe("deriveSessionState", () => {
     );
   });
 
+  test("SessionEnd followed by more activity → not stopped (session resumed)", () => {
+    const events = [
+      mkEvent({ event: "UserPromptSubmit" }),
+      mkEvent({ event: "SessionEnd" }),
+      mkEvent({ event: "UserPromptSubmit" }),
+      mkEvent({ event: "PreToolUse", tool_name: "Bash", tool_use_id: "u1" }),
+    ];
+    // Post-SessionEnd activity means the session resumed. Unmatched PreToolUse
+    // wins → running.
+    expect(deriveSessionState(events)).toBe("running");
+  });
+
   test("SessionEnd with prior failure → error", () => {
     const events = [
       mkEvent({ event: "PreToolUse", tool_name: "Bash", tool_use_id: "u1" }),

@@ -13,6 +13,8 @@ import Timeline from "@/components/SessionDetail/Timeline.vue";
 import SummaryCard from "@/components/SessionDetail/SummaryCard.vue";
 import RecentList from "@/components/SessionDetail/RecentList.vue";
 import EventDrawer from "@/components/SessionDetail/EventDrawer.vue";
+import EventsTab from "@/components/SessionDetail/EventsTab.vue";
+import PromptsTab from "@/components/SessionDetail/PromptsTab.vue";
 import SegmentedControl from "@/components/ui/SegmentedControl.vue";
 
 const route = useRoute();
@@ -58,6 +60,9 @@ const subtitle = computed(() => {
   if (s.model) parts.push(s.model);
   return parts.join(" · ");
 });
+
+const machineHost = computed(() => store.session?.machine_host ?? null);
+const git = computed(() => store.session?.git ?? null);
 
 const isLive = computed(() => {
   const s = store.session;
@@ -107,6 +112,10 @@ function onBarClick(call: ToolCall) {
           </h2>
           <p class="mt-0.5 flex items-center gap-2 font-mono text-[12.5px] text-fg-2">
             <span>{{ subtitle }}</span>
+            <span v-if="machineHost" class="text-fg-3">· @{{ machineHost }}</span>
+            <span v-if="git" class="text-fg-3">
+              · ⎇ {{ git.branch }}<span v-if="git.dirty" class="text-attn"> ●</span>
+            </span>
             <span
               v-if="store.session.source && store.session.source !== 'startup'"
               class="rounded-chip border border-line px-1.5 py-0.5 text-[11px] text-fg-3"
@@ -124,15 +133,24 @@ function onBarClick(call: ToolCall) {
           <button
             type="button"
             :class="[
-              'rounded-chip border px-2.5 py-1 font-mono text-[11.5px] transition-colors',
+              'inline-flex items-center gap-1.5 rounded-chip border px-2.5 py-1 font-mono text-[11.5px] transition-colors',
               followNow
                 ? 'border-run text-run'
                 : 'border-line text-fg-2 hover:text-fg-1',
             ]"
             :aria-pressed="followNow"
+            :title="
+              followNow
+                ? 'Auto-scroll is on — Recent list jumps to newest on each event'
+                : 'Auto-scroll is off — Recent list stays where you left it'
+            "
             @click="followNow = !followNow"
           >
-            Follow now →
+            <span
+              :class="['inline-block h-1.5 w-1.5 rounded-full', followNow ? 'bg-run' : 'bg-fg-3']"
+              aria-hidden="true"
+            />
+            Auto-scroll
           </button>
         </div>
       </div>
@@ -162,21 +180,15 @@ function onBarClick(call: ToolCall) {
         </div>
       </div>
 
-      <div
+      <EventsTab
         v-else-if="tab === 'events'"
-        class="rounded-tile border border-line bg-bg-1 p-6 font-mono text-[12px] text-fg-3"
-      >
-        <div class="uppercase tracking-[0.12em]">events — coming in a later version</div>
-        <p class="mt-2">This tab will render the raw event stream as a searchable table.</p>
-      </div>
+        :events="store.events"
+      />
 
-      <div
+      <PromptsTab
         v-else
-        class="rounded-tile border border-line bg-bg-1 p-6 font-mono text-[12px] text-fg-3"
-      >
-        <div class="uppercase tracking-[0.12em]">prompts — coming in a later version</div>
-        <p class="mt-2">This tab will collect every user prompt submitted in this session.</p>
-      </div>
+        :events="store.events"
+      />
     </template>
 
     <EventDrawer :call="selectedCall" @close="selectedCall = null" />

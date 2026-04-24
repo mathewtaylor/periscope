@@ -21,14 +21,35 @@ export interface StopFailureSummary {
   message: string | null;
 }
 
+export interface TokenTotals {
+  input: number;
+  output: number;
+  cached: number;
+}
+
+export interface ContextInfo {
+  used: number;
+  limit: number;
+  remaining_pct: number;
+}
+
+export interface AgentContext {
+  agent_id: string;
+  agent_type: string;
+  tokens: TokenTotals;
+  context: ContextInfo | null;
+}
+
 export interface SessionSummary {
-  tokens: null;
+  tokens: TokenTotals | null;
   model: string | null;
   duration_ms: number;
   event_count: number;
   error_count: number;
   tool_mix: Array<{ name: string; count: number }>;
   stop_failure: StopFailureSummary | null;
+  context: ContextInfo | null;
+  agent_contexts: AgentContext[];
 }
 
 async function getJson<T>(url: string): Promise<T> {

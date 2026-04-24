@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { SessionRow } from "@/lib/types";
-import type { SessionSummary } from "@/lib/api";
+import type { SessionSummary, ContextInfo } from "@/lib/api";
 import { formatDurationShort } from "@/lib/time";
 
 interface Props {
@@ -67,6 +67,34 @@ const mixBars = computed(() => {
     color: colorFor(t.name),
   }));
 });
+
+function formatTokens(n: number): string {
+  if (n < 1000) return `${n}`;
+  if (n < 1_000_000) return `${(n / 1000).toFixed(1)}k`;
+  return `${(n / 1_000_000).toFixed(2)}M`;
+}
+
+const tokens = computed(() => props.summary?.tokens ?? null);
+
+const context = computed(() => props.summary?.context ?? null);
+
+function contextTone(pct: number): string {
+  if (pct >= 40) return "bg-run";
+  if (pct >= 15) return "bg-attn";
+  return "bg-err";
+}
+
+function contextLabel(c: ContextInfo): string {
+  const usedK = Math.round(c.used / 1000);
+  const limitK = Math.round(c.limit / 1000);
+  return `${usedK.toLocaleString()}k / ${limitK.toLocaleString()}k · ${c.remaining_pct}% remaining`;
+}
+
+const agentContexts = computed(() => props.summary?.agent_contexts ?? []);
+
+function agentPct(c: ContextInfo | null): number {
+  return c ? c.remaining_pct : 0;
+}
 </script>
 
 <template>
@@ -98,13 +126,49 @@ const mixBars = computed(() => {
         </dd>
       </template>
 
-      <dt class="text-fg-3">tokens</dt>
+      <dt class="self-start text-fg-3">tokens</dt>
       <dd
+        v-if="tokens"
+        class="text-fg-1 leading-tight"
+        :title="`cumulative for this session — input ${tokens.input.toLocaleString()} · output ${tokens.output.toLocaleString()} · cached ${tokens.cached.toLocaleString()}`"
+      >
+        <div class="flex justify-between gap-2">
+          <span class="text-fg-3">input</span>
+          <span class="tabular-nums">{{ formatTokens(tokens.input) }}</span>
+        </div>
+        <div class="flex justify-between gap-2">
+          <span class="text-fg-3">output</span>
+          <span class="tabular-nums">{{ formatTokens(tokens.output) }}</span>
+        </div>
+        <div class="flex justify-between gap-2">
+          <span class="text-fg-3">cached</span>
+          <span class="tabular-nums">{{ formatTokens(tokens.cached) }}</span>
+        </div>
+      </dd>
+      <dd
+        v-else
         class="text-fg-3"
-        title="Token counts are not emitted by Claude Code hooks in v1. Will appear if a TokensUsed event is added upstream."
+        title="Install periscope-relay to populate this (see Config)"
       >
         —
       </dd>
+
+      <dt class="text-fg-3">context</dt>
+      <dd v-if="context">
+        <div
+          class="w-full rounded overflow-hidden bg-bg-3"
+          style="height: 8px"
+        >
+          <div
+            :class="contextTone(context.remaining_pct)"
+            :style="{ width: `${context.remaining_pct}%`, height: '100%' }"
+          />
+        </div>
+        <div class="mt-1 font-mono text-[11px] text-fg-2">
+          {{ contextLabel(context) }}
+        </div>
+      </dd>
+      <dd v-else class="text-fg-3">—</dd>
 
       <dt class="text-fg-3">model</dt>
       <dd class="text-fg-1 truncate">{{ props.summary?.model ?? "—" }}</dd>
@@ -117,6 +181,44 @@ const mixBars = computed(() => {
       <dt class="text-fg-3">duration</dt>
       <dd>{{ formatDurationShort(props.session.duration_ms) }}</dd>
     </dl>
+
+    <div
+      v-if="agentContexts.length > 0"
+      class="mt-3 border-t border-line pt-3"
+    >
+      <div class="font-mono text-[11px] uppercase tracking-[0.12em] text-fg-3">
+        subagents context
+      </div>
+      <div
+        class="mt-1.5 max-h-[6rem] overflow-y-auto space-y-1 font-mono text-[11.5px]"
+      >
+        <div
+          v-for="ac in agentContexts"
+          :key="ac.agent_id"
+          class="flex items-center gap-2"
+        >
+          <span class="w-20 shrink-0 truncate text-fg-2">
+            {{ ac.agent_type || "agent" }}
+          </span>
+          <div
+            class="flex-1 rounded overflow-hidden bg-bg-3"
+            style="height: 6px"
+          >
+            <div
+              v-if="ac.context"
+              :class="contextTone(ac.context.remaining_pct)"
+              :style="{
+                width: `${ac.context.remaining_pct}%`,
+                height: '100%',
+              }"
+            />
+          </div>
+          <span class="w-10 shrink-0 text-right text-fg-3">
+            {{ agentPct(ac.context) }}%
+          </span>
+        </div>
+      </div>
+    </div>
 
     <div class="mt-3 border-t border-line pt-3">
       <div class="font-mono text-[11px] text-fg-3">tool mix</div>

@@ -206,6 +206,12 @@ const startedTitle = computed(() => {
           >
             {{ modelShort }}
           </span>
+          <span
+            v-if="s.git && s.git.branch"
+            class="font-mono text-[10.5px] px-1.5 py-0.5 rounded-chip border border-line text-fg-2 whitespace-nowrap"
+          >
+            ⎇ {{ s.git.branch }}<span v-if="s.git.dirty" class="text-attn"> ●</span>
+          </span>
         </div>
         <p class="mt-0.5 font-mono text-[11px] text-fg-3 truncate">
           {{ cwdDisplay }}

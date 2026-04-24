@@ -11,7 +11,9 @@ const host = ref(
   typeof window !== "undefined" ? window.location.origin : "http://localhost:5050",
 );
 
-const hookConfig = computed(() => {
+// Legacy HTTP hooks — kept as a collapsed alternative for users who
+// don't want a client-side install.
+const httpConfig = computed(() => {
   const base = host.value.replace(/\/+$/, "");
   const hooks = {
     SessionStart: [
@@ -44,9 +46,7 @@ const hookConfig = computed(() => {
     Notification: [
       { hooks: [{ type: "http", url: `${base}/hook/Notification` }] },
     ],
-    Stop: [
-      { hooks: [{ type: "http", url: `${base}/hook/Stop` }] },
-    ],
+    Stop: [{ hooks: [{ type: "http", url: `${base}/hook/Stop` }] }],
     PreCompact: [
       { hooks: [{ type: "http", url: `${base}/hook/PreCompact` }] },
     ],
@@ -54,15 +54,72 @@ const hookConfig = computed(() => {
   return JSON.stringify({ hooks }, null, 2);
 });
 
-const copyState = ref<"idle" | "copied" | "error">("idle");
-async function copy() {
+const httpCopyState = ref<"idle" | "copied" | "error">("idle");
+async function copyHttp() {
   try {
-    await navigator.clipboard.writeText(hookConfig.value);
-    copyState.value = "copied";
-    setTimeout(() => (copyState.value = "idle"), 1800);
+    await navigator.clipboard.writeText(httpConfig.value);
+    httpCopyState.value = "copied";
+    setTimeout(() => (httpCopyState.value = "idle"), 1800);
   } catch {
-    copyState.value = "error";
-    setTimeout(() => (copyState.value = "idle"), 2500);
+    httpCopyState.value = "error";
+    setTimeout(() => (httpCopyState.value = "idle"), 2500);
+  }
+}
+
+const relayPath = ref("~/.local/bin/periscope-relay.ts");
+
+const relayEnvLine = computed(() => {
+  const base = host.value.replace(/\/+$/, "");
+  return `export PERISCOPE_URL=${base}`;
+});
+
+const relayFullConfig = computed(() => {
+  const cmd = `bun ${relayPath.value}`;
+  const hooks = {
+    SessionStart: [{ hooks: [{ type: "command", command: cmd }] }],
+    SessionEnd: [{ hooks: [{ type: "command", command: cmd }] }],
+    UserPromptSubmit: [{ hooks: [{ type: "command", command: cmd }] }],
+    PreToolUse: [
+      { matcher: "*", hooks: [{ type: "command", command: cmd }] },
+    ],
+    PostToolUse: [
+      { matcher: "*", hooks: [{ type: "command", command: cmd }] },
+    ],
+    PostToolUseFailure: [
+      { matcher: "*", hooks: [{ type: "command", command: cmd }] },
+    ],
+    PermissionDenied: [{ hooks: [{ type: "command", command: cmd }] }],
+    SubagentStart: [{ hooks: [{ type: "command", command: cmd }] }],
+    SubagentStop: [{ hooks: [{ type: "command", command: cmd }] }],
+    Notification: [{ hooks: [{ type: "command", command: cmd }] }],
+    Stop: [{ hooks: [{ type: "command", command: cmd }] }],
+    StopFailure: [{ hooks: [{ type: "command", command: cmd }] }],
+    PreCompact: [{ hooks: [{ type: "command", command: cmd }] }],
+  };
+  return JSON.stringify({ hooks }, null, 2);
+});
+
+const relayCopyState = ref<"idle" | "copied" | "error">("idle");
+async function copyRelay() {
+  try {
+    await navigator.clipboard.writeText(relayFullConfig.value);
+    relayCopyState.value = "copied";
+    setTimeout(() => (relayCopyState.value = "idle"), 1800);
+  } catch {
+    relayCopyState.value = "error";
+    setTimeout(() => (relayCopyState.value = "idle"), 2500);
+  }
+}
+
+const envCopyState = ref<"idle" | "copied" | "error">("idle");
+async function copyEnv() {
+  try {
+    await navigator.clipboard.writeText(relayEnvLine.value);
+    envCopyState.value = "copied";
+    setTimeout(() => (envCopyState.value = "idle"), 1800);
+  } catch {
+    envCopyState.value = "error";
+    setTimeout(() => (envCopyState.value = "idle"), 2500);
   }
 }
 
@@ -78,8 +135,6 @@ async function runClear() {
     const { cleared } = await clearAllEvents();
     clearedCount.value = cleared;
     confirming.value = false;
-    // Client will also receive a ws "reset" message; force a local refresh for
-    // good measure.
     void sessions.refresh();
     setTimeout(() => (clearedCount.value = null), 4000);
   } catch (err) {
@@ -103,21 +158,22 @@ function goHome() {
       </p>
     </div>
 
+    <!-- Primary: install the enrichment relay -->
     <section class="mb-10 rounded-tile border border-line bg-bg-1 p-6">
-      <div class="mb-4 flex items-start justify-between gap-6">
-        <div>
-          <h2
-            class="font-mono text-[11px] uppercase tracking-[0.14em] text-fg-3"
-          >
-            step 1 — hook configuration
-          </h2>
-          <p class="mt-2 text-[13px] text-fg-1">
-            Paste the block below into
-            <code class="font-mono text-fg">~/.claude/settings.json</code>
-            on every machine you want to observe. It wires every relevant
-            Claude Code hook event to this Periscope instance.
-          </p>
-        </div>
+      <div class="mb-4">
+        <h2
+          class="font-mono text-[11px] uppercase tracking-[0.14em] text-fg-3"
+        >
+          step 1 — hook configuration (with enrichment relay)
+        </h2>
+        <p class="mt-2 text-[13px] text-fg-1">
+          Wires Claude Code hooks through a small local Bun script
+          (<code class="font-mono text-fg">periscope-relay.ts</code>) that
+          enriches every payload with hostname, git context, and live token
+          counts read fresh from the transcript file, then forwards to this
+          collector. This is the recommended path — without the relay,
+          tokens and remaining-context stay blank.
+        </p>
       </div>
 
       <label class="block">
@@ -133,31 +189,55 @@ function goHome() {
           spellcheck="false"
         />
         <p class="mt-1.5 font-mono text-[11px] text-fg-3">
-          Where Claude Code should POST hook events. Default is the dashboard
-          URL. Change to a Tailscale hostname (e.g.
+          Where the relay should POST. Default is this dashboard's URL. Change
+          to a Tailscale hostname (e.g.
           <code>http://home-server:5050</code>) if other machines need to
           reach it.
         </p>
       </label>
 
-      <div class="relative mt-5">
-        <pre
-          class="max-h-[520px] overflow-auto rounded-tile border border-line bg-bg px-4 py-3 font-mono text-[12px] leading-relaxed text-fg-1"
-        >{{ hookConfig }}</pre>
-        <button
-          type="button"
-          class="absolute right-3 top-3 rounded-chip border border-line bg-bg-2 px-2.5 py-1 font-mono text-[11px] text-fg-1 transition-colors hover:border-line-2 hover:text-fg"
-          @click="copy"
+      <label class="mt-5 block">
+        <span
+          class="font-mono text-[10.5px] uppercase tracking-[0.14em] text-fg-3"
         >
-          <template v-if="copyState === 'copied'">✓ copied</template>
-          <template v-else-if="copyState === 'error'">copy failed</template>
-          <template v-else>copy</template>
-        </button>
+          relay script path (on the client machine)
+        </span>
+        <input
+          v-model="relayPath"
+          type="text"
+          class="mt-1.5 w-full rounded-chip border border-line bg-bg-2 px-3 py-2 font-mono text-[12.5px] text-fg focus:border-line-2 focus:outline-none"
+          spellcheck="false"
+        />
+        <p class="mt-1.5 font-mono text-[11px] text-fg-3">
+          Stable absolute path where
+          <code class="text-fg">periscope-relay.ts</code> lives on each
+          Claude Code machine. On Windows use something like
+          <code class="text-fg">%USERPROFILE%\bin\periscope-relay.ts</code>.
+        </p>
+      </label>
+
+      <div
+        class="mt-3 flex items-start gap-3 rounded-tile border border-line bg-bg-2 p-3"
+      >
+        <span
+          class="mt-0.5 font-mono text-[10.5px] uppercase tracking-[0.14em] text-fg-3"
+        >
+          tip
+        </span>
+        <p class="flex-1 text-[12.5px] text-fg-1">
+          From the Periscope repo root you can run
+          <code class="font-mono text-fg">./install-relay.sh</code> to copy
+          the script to
+          <code class="font-mono text-fg">~/.local/bin/periscope-relay.ts</code>
+          in one step (pass
+          <code class="font-mono text-fg">--path &lt;dir&gt;</code> to override).
+          The installer prints the exact
+          <code class="font-mono text-fg">bun &lt;path&gt;</code> command to
+          paste into <code class="font-mono text-fg">settings.json</code>.
+        </p>
       </div>
 
-      <ol
-        class="mt-6 space-y-3 text-[13px] text-fg-1"
-      >
+      <ol class="mt-6 space-y-3 text-[13px] text-fg-1">
         <li class="flex gap-3">
           <span
             class="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line-2 font-mono text-[11px] text-fg-2"
@@ -165,12 +245,10 @@ function goHome() {
             1
           </span>
           <span>
-            Copy the JSON above (click
-            <span class="font-mono text-fg">copy</span>) and paste it into
-            <code class="font-mono text-fg">~/.claude/settings.json</code>.
-            If the file already has a top-level <code class="font-mono text-fg">"hooks"</code>
-            key, merge by adding each event handler into the existing arrays
-            rather than overwriting.
+            Copy
+            <code class="font-mono text-fg">scripts/periscope-relay.ts</code>
+            from the Periscope repo to the path above on every machine you
+            want observed.
           </span>
         </li>
         <li class="flex gap-3">
@@ -179,12 +257,25 @@ function goHome() {
           >
             2
           </span>
-          <span>
-            Open a new Claude Code session and run
-            <code class="font-mono text-fg">/hooks</code>. Claude Code
-            requires explicit approval of any hook changes before they take
-            effect; step through the prompts and accept each one.
-          </span>
+          <div class="flex-1">
+            Set <code class="font-mono text-fg">PERISCOPE_URL</code> in the
+            shell that Claude Code runs under (your shell rc / Windows user
+            env). Export line:
+            <div class="relative mt-2">
+              <pre
+                class="overflow-auto rounded-tile border border-line bg-bg px-3 py-2 font-mono text-[12px] text-fg-1"
+              >{{ relayEnvLine }}</pre>
+              <button
+                type="button"
+                class="absolute right-2 top-2 rounded-chip border border-line bg-bg-2 px-2 py-0.5 font-mono text-[10.5px] text-fg-1 transition-colors hover:border-line-2 hover:text-fg"
+                @click="copyEnv"
+              >
+                <template v-if="envCopyState === 'copied'">✓</template>
+                <template v-else-if="envCopyState === 'error'">fail</template>
+                <template v-else>copy</template>
+              </button>
+            </div>
+          </div>
         </li>
         <li class="flex gap-3">
           <span
@@ -193,16 +284,11 @@ function goHome() {
             3
           </span>
           <span>
-            Run any command. Within a second, its session should appear on
-            the
-            <button
-              type="button"
-              class="font-mono text-run hover:underline"
-              @click="goHome"
-            >
-              Sessions home
-            </button>
-            with a live sparkline.
+            Paste the JSON below into
+            <code class="font-mono text-fg">~/.claude/settings.json</code>.
+            If the file already has a
+            <code class="font-mono text-fg">"hooks"</code> key, merge entries
+            rather than overwriting the block.
           </span>
         </li>
         <li class="flex gap-3">
@@ -212,14 +298,126 @@ function goHome() {
             4
           </span>
           <span>
-            Hooks are non-blocking: if Periscope is down, Claude Code
-            continues normally. The collector returns
-            <code class="font-mono text-fg">200 {"ok":true}</code> as fast as
-            possible and persists events asynchronously.
+            Open Claude Code and run
+            <code class="font-mono text-fg">/hooks</code> to approve the new
+            command-type hooks. Claude Code requires review before they take
+            effect.
+          </span>
+        </li>
+        <li class="flex gap-3">
+          <span
+            class="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line-2 font-mono text-[11px] text-fg-2"
+          >
+            5
+          </span>
+          <span>
+            Send any prompt. The session should appear on
+            <button
+              type="button"
+              class="font-mono text-run hover:underline"
+              @click="goHome"
+            >
+              Sessions home
+            </button>
+            with tokens + git context populated.
           </span>
         </li>
       </ol>
+
+      <div class="relative mt-6">
+        <pre
+          class="max-h-[520px] overflow-auto rounded-tile border border-line bg-bg px-4 py-3 font-mono text-[12px] leading-relaxed text-fg-1"
+        >{{ relayFullConfig }}</pre>
+        <button
+          type="button"
+          class="absolute right-3 top-3 rounded-chip border border-line bg-bg-2 px-2.5 py-1 font-mono text-[11px] text-fg-1 transition-colors hover:border-line-2 hover:text-fg"
+          @click="copyRelay"
+        >
+          <template v-if="relayCopyState === 'copied'">✓ copied</template>
+          <template v-else-if="relayCopyState === 'error'">
+            copy failed
+          </template>
+          <template v-else>copy</template>
+        </button>
+      </div>
+      <p class="mt-1.5 font-mono text-[11px] text-fg-3">
+        The same block also lives in
+        <code class="text-fg">settings.claude.example.json</code> at the
+        repo root.
+      </p>
     </section>
+
+    <!-- Alternative: direct HTTP hooks (no enrichment), collapsed by default -->
+    <details class="mb-10 rounded-tile border border-line bg-bg-1 p-6 group">
+      <summary
+        class="cursor-pointer list-none flex items-center justify-between gap-4"
+      >
+        <div>
+          <h2
+            class="font-mono text-[11px] uppercase tracking-[0.14em] text-fg-3"
+          >
+            alternative — direct HTTP hooks (no enrichment)
+          </h2>
+          <p class="mt-2 text-[13px] text-fg-1">
+            Zero-install fallback. Claude Code POSTs straight to the
+            collector, skipping the relay. Tokens, remaining context, git
+            branch, and hostname stay unavailable; everything else works.
+          </p>
+        </div>
+        <span
+          aria-hidden="true"
+          class="inline-block font-mono text-[11px] text-fg-3 transition-transform group-open:rotate-90"
+        >
+          ▶
+        </span>
+      </summary>
+
+      <div class="mt-6">
+        <ol class="space-y-3 text-[13px] text-fg-1">
+          <li class="flex gap-3">
+            <span
+              class="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line-2 font-mono text-[11px] text-fg-2"
+            >
+              1
+            </span>
+            <span>
+              Paste the JSON below into
+              <code class="font-mono text-fg">~/.claude/settings.json</code>.
+              It uses the collector host from step 1.
+            </span>
+          </li>
+          <li class="flex gap-3">
+            <span
+              class="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full border border-line-2 font-mono text-[11px] text-fg-2"
+            >
+              2
+            </span>
+            <span>
+              Run <code class="font-mono text-fg">/hooks</code> inside Claude
+              Code to approve. HTTP hooks are non-blocking — if Periscope is
+              down, Claude Code continues normally.
+            </span>
+          </li>
+        </ol>
+
+        <div class="relative mt-5">
+          <pre
+            class="max-h-[520px] overflow-auto rounded-tile border border-line bg-bg px-4 py-3 font-mono text-[12px] leading-relaxed text-fg-1"
+          >{{ httpConfig }}</pre>
+          <button
+            type="button"
+            class="absolute right-3 top-3 rounded-chip border border-line bg-bg-2 px-2.5 py-1 font-mono text-[11px] text-fg-1 transition-colors hover:border-line-2 hover:text-fg"
+            @click="copyHttp"
+          >
+            <template v-if="httpCopyState === 'copied'">✓ copied</template>
+            <template v-else-if="httpCopyState === 'error'">
+              copy failed
+            </template>
+            <template v-else>copy</template>
+          </button>
+        </div>
+      </div>
+    </details>
 
     <section class="rounded-tile border border-line bg-bg-1 p-6">
       <h2

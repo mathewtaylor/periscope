@@ -86,11 +86,34 @@ Dashboard: http://localhost:5050. Data persists in the `periscope-data` named vo
 
 ## Configure Claude Code hooks
 
-Copy the `hooks` block from [`settings.claude.example.json`](./settings.claude.example.json) into `~/.claude/settings.json` on every machine you want to observe. Replace `<host>` with the hostname or IP where Periscope is reachable (`localhost`, a Tailscale hostname, `192.168.x.y`, etc.).
+Two paths — pick based on whether you want tokens / git context / hostname on the dashboard:
 
-After saving, run `/hooks` inside Claude Code once to approve the new HTTP hooks — Claude Code requires review of hook configuration changes before they take effect.
+### Recommended — install the enrichment relay
 
-Hooks are non-blocking: if Periscope is down, Claude Code continues normally. The collector returns `200 {"ok":true}` as fast as possible and persists + broadcasts asynchronously.
+The relay is a small Bun script that runs on each Claude Code machine, enriches hook payloads with local-only context (hostname, git branch/commit/dirty, cumulative tokens read from the transcript JSONL), then forwards to this collector. Without it, those columns stay blank on the dashboard.
+
+```bash
+# On every machine running Claude Code:
+git clone <periscope-repo> && cd periscope
+./install-relay.sh                        # → ~/.local/bin/periscope-relay.ts
+#   (pass --path <dir> to override, --print to dry-run)
+
+export PERISCOPE_URL=http://<host>:5050   # add to your shell profile
+```
+
+Then paste the `"type": "command"` block from [`settings.claude.example.json`](./settings.claude.example.json) into `~/.claude/settings.json`, replacing `<PATH_TO_RELAY>` with the path the installer printed. Run `/hooks` inside Claude Code once to approve.
+
+The `Config` tab in the dashboard also generates this block for you with live-editable paths.
+
+### Zero-install fallback — direct HTTP hooks
+
+Use the legacy HTTP hook pattern. Claude Code POSTs straight to the collector. Works out of the box but leaves `tokens`, `context`, `git`, and `machine` columns empty.
+
+Open the `Config` tab → expand the "alternative — direct HTTP hooks (no enrichment)" section to generate the JSON with the right collector host. Paste into `~/.claude/settings.json`, run `/hooks` to approve.
+
+### Non-blocking contract
+
+Both patterns are non-blocking: if Periscope is down, Claude Code continues normally. The collector returns `200 {"ok":true}` as fast as possible and persists + broadcasts asynchronously; the relay also exits 0 on any internal error.
 
 ## The dashboard
 

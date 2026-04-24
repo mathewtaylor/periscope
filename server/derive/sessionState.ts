@@ -18,7 +18,10 @@ function parsePayload(raw: string): Record<string, unknown> | null {
 }
 
 export function deriveSessionState(events: readonly EventRow[]): SessionState {
-  let hasSessionEnd = false;
+  // Track the most recent SessionEnd ts. Any non-SessionEnd event afterwards
+  // means the session resumed (e.g. user ran /exit then kept going), so we
+  // clear the terminal state rather than flagging it stopped forever.
+  let lastSessionEndTs: string | null = null;
   let hasError = false;
   const mainOpenTools = new Set<string>();
   const openSubagents = new Set<string>();
@@ -27,7 +30,11 @@ export function deriveSessionState(events: readonly EventRow[]): SessionState {
   for (const e of events) {
     const isMain = e.agent_id === null;
 
-    if (e.event === "SessionEnd") hasSessionEnd = true;
+    if (e.event === "SessionEnd") {
+      lastSessionEndTs = e.ts;
+    } else if (lastSessionEndTs !== null) {
+      lastSessionEndTs = null;
+    }
     if (e.event === "PostToolUseFailure" || e.event === "StopFailure") {
       hasError = true;
     }
@@ -74,7 +81,7 @@ export function deriveSessionState(events: readonly EventRow[]): SessionState {
     }
   }
 
-  if (hasSessionEnd) return hasError ? "error" : "stopped";
+  if (lastSessionEndTs !== null) return hasError ? "error" : "stopped";
   if (pendingNotificationTs) return "wait";
   if (mainOpenTools.size > 0) return "running";
   if (openSubagents.size > 0) return "sub";

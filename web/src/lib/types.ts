@@ -30,6 +30,12 @@ export interface LastTool {
   target: string;
 }
 
+export interface GitInfo {
+  branch: string;
+  commit: string;
+  dirty: boolean;
+}
+
 export interface SessionRow {
   session_id: string;
   project: string;
@@ -49,6 +55,8 @@ export interface SessionRow {
   model?: string;
   permission_mode: string | null;
   source: string | null;
+  machine_host: string | null;
+  git: GitInfo | null;
 }
 
 export interface SessionsResponse {
