@@ -88,7 +88,7 @@ const subtitle = computed(() => {
   return `${a} active · ${s} stopped in the last 24 hours`;
 });
 
-const GRID_COLS = 4;
+const GRID_COLS = 3;
 
 const ghostCount = computed(() => {
   if (prefs.viewMode !== "tiles") return 0;
@@ -129,7 +129,7 @@ function isExiting(sessionId: string): boolean {
     <div
       v-if="prefs.viewMode === 'tiles'"
       class="grid gap-3"
-      style="grid-template-columns: repeat(auto-fill, minmax(max(280px, calc((100% - 36px) / 4)), 1fr))"
+      style="grid-template-columns: repeat(auto-fill, minmax(max(320px, calc((100% - 24px) / 3)), 1fr))"
     >
       <SessionTile
         v-for="s in displayActive"

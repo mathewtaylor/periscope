@@ -15,15 +15,23 @@ export interface ActiveTool {
   started_at: string;
 }
 
+export interface LastTool {
+  name: string;
+  target: string;
+}
+
 export interface ActiveSubagent {
   agent_id: string;
   agent_type: string;
   started_at: string;
-}
-
-export interface LastTool {
-  name: string;
-  target: string;
+  // Spawn metadata captured from the parent's PreToolUse(Task) event.
+  // Null when the spawn event is missing (e.g. seeded fixtures, malformed
+  // transcripts, or when the relay was not running at spawn time).
+  description: string | null;
+  subagent_type: string | null;
+  event_count: number;
+  active_tool: ActiveTool | null;
+  last_tool: LastTool | null;
 }
 
 export interface GitInfo {
@@ -156,26 +164,163 @@ export function buildSessionRow(
     };
   }
 
-  // Active subagents
-  const openAgents = new Map<string, { type: string; startedAt: string }>();
+  // Active subagents — collect spawn metadata from parent Task PreToolUse,
+  // pair it to each SubagentStart (by tool_use_id when available, otherwise
+  // chronologically), and track per-subagent tool activity so each tile row
+  // can show what the subagent was actually told to do AND what it's doing
+  // right now.
+  interface TaskSpawn {
+    ts: string;
+    tool_use_id: string | null;
+    description: string | null;
+    prompt: string | null;
+    subagent_type: string | null;
+    consumed: boolean;
+  }
+  interface AgentState {
+    agentId: string;
+    agentType: string;
+    startedAt: string;
+    description: string | null;
+    subagentType: string | null;
+    eventCount: number;
+    openTools: Map<string, EventRow>;
+    lastTool: LastTool | null;
+  }
+
+  const taskSpawns: TaskSpawn[] = [];
+  const agentStates = new Map<string, AgentState>();
+  const openAgents = new Set<string>();
+
+  function findSpawn(
+    tool_use_id: string | null,
+    subagent_type: string | null,
+    spawnedBefore: string,
+  ): TaskSpawn | null {
+    if (tool_use_id) {
+      for (const s of taskSpawns) {
+        if (!s.consumed && s.tool_use_id === tool_use_id) return s;
+      }
+    }
+    for (const s of taskSpawns) {
+      if (s.consumed) continue;
+      if (s.ts > spawnedBefore) continue;
+      if (
+        subagent_type &&
+        s.subagent_type &&
+        s.subagent_type !== subagent_type
+      ) {
+        continue;
+      }
+      return s;
+    }
+    return null;
+  }
+
   for (const e of events) {
-    if (e.event === "SubagentStart" && e.agent_id) {
-      openAgents.set(e.agent_id, {
-        type: e.agent_type ?? "",
-        startedAt: e.ts,
+    // Capture Task spawns from the parent thread.
+    if (
+      e.agent_id === null &&
+      e.event === "PreToolUse" &&
+      e.tool_name === "Task"
+    ) {
+      const payload = parsePayload(e.payload);
+      const input = (payload?.tool_input ?? {}) as Record<string, unknown>;
+      const description =
+        typeof input.description === "string" ? input.description : null;
+      const prompt = typeof input.prompt === "string" ? input.prompt : null;
+      const subagent_type =
+        typeof input.subagent_type === "string" ? input.subagent_type : null;
+      taskSpawns.push({
+        ts: e.ts,
+        tool_use_id: e.tool_use_id ?? null,
+        description,
+        prompt,
+        subagent_type,
+        consumed: false,
       });
     }
-    if (e.event === "SubagentStop" && e.agent_id) {
+
+    if (e.agent_id === null) continue;
+
+    let state = agentStates.get(e.agent_id);
+    if (!state) {
+      state = {
+        agentId: e.agent_id,
+        agentType: e.agent_type ?? "",
+        startedAt: e.ts,
+        description: null,
+        subagentType: null,
+        eventCount: 0,
+        openTools: new Map(),
+        lastTool: null,
+      };
+      agentStates.set(e.agent_id, state);
+    }
+    state.eventCount++;
+    if (e.agent_type) state.agentType = e.agent_type;
+
+    if (e.event === "SubagentStart") {
+      state.startedAt = e.ts;
+      openAgents.add(e.agent_id);
+      const spawn = findSpawn(e.tool_use_id, e.agent_type ?? null, e.ts);
+      if (spawn) {
+        spawn.consumed = true;
+        state.description = spawn.description;
+        state.subagentType = spawn.subagent_type ?? state.agentType;
+      }
+    }
+    if (e.event === "SubagentStop") {
       openAgents.delete(e.agent_id);
     }
+
+    if (e.event === "PreToolUse" && e.tool_use_id) {
+      state.openTools.set(e.tool_use_id, e);
+    }
+    if (
+      (e.event === "PostToolUse" ||
+        e.event === "PostToolUseFailure" ||
+        e.event === "PermissionDenied") &&
+      e.tool_use_id
+    ) {
+      state.openTools.delete(e.tool_use_id);
+      if (e.event === "PostToolUse" && e.tool_name) {
+        const payload = parsePayload(e.payload);
+        state.lastTool = {
+          name: e.tool_name,
+          target: deriveToolTarget(e.tool_name, payload?.tool_input),
+        };
+      }
+    }
   }
-  const activeSubagents: ActiveSubagent[] = [...openAgents.entries()].map(
-    ([id, v]) => ({
-      agent_id: id,
-      agent_type: v.type,
-      started_at: v.startedAt,
-    }),
-  );
+
+  const activeSubagents: ActiveSubagent[] = [...openAgents]
+    .map((id) => {
+      const s = agentStates.get(id);
+      if (!s) return null;
+      let activeTool: ActiveTool | null = null;
+      if (s.openTools.size > 0) {
+        const values = [...s.openTools.values()];
+        const open = values[values.length - 1]!;
+        const payload = parsePayload(open.payload);
+        activeTool = {
+          name: open.tool_name ?? "",
+          target: deriveToolTarget(open.tool_name, payload?.tool_input),
+          started_at: open.ts,
+        };
+      }
+      return {
+        agent_id: s.agentId,
+        agent_type: s.agentType,
+        started_at: s.startedAt,
+        description: s.description,
+        subagent_type: s.subagentType,
+        event_count: s.eventCount,
+        active_tool: activeTool,
+        last_tool: s.lastTool,
+      } satisfies ActiveSubagent;
+    })
+    .filter((s): s is ActiveSubagent => s !== null);
 
   // Last tool — latest PostToolUse on main (for idle / stopped tiles)
   let lastTool: LastTool | undefined;

@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { RouterLink } from "vue-router";
-import type { SessionRow } from "@/lib/types";
-import {
-  formatDurationShort,
-  formatStartTime,
-} from "@/lib/time";
+import type {
+  ActiveSubagent,
+  ActiveTool,
+  LastTool,
+  SessionRow,
+} from "@/lib/types";
+import { ageFromNow, formatDurationShort, formatStartTime } from "@/lib/time";
 import BreathingDot from "./ui/BreathingDot.vue";
 import Sparkline from "./Sparkline.vue";
-import SubagentChips from "./SubagentChips.vue";
 
 interface Props {
   session: SessionRow;
@@ -31,26 +32,8 @@ const topEdgeClass = computed(() => {
   }
 });
 
-const opacity = computed(() => (s.value.state === "idle" ? "opacity-[0.72]" : ""));
-
-const dotTone = computed<"run" | "sub" | "attn" | "fg-3">(() => {
-  switch (s.value.state) {
-    case "running":
-      return "run";
-    case "sub":
-      return "sub";
-    case "wait":
-      return "attn";
-    default:
-      return "fg-3";
-  }
-});
-
-const dotBreathing = computed(
-  () =>
-    s.value.state === "running" ||
-    s.value.state === "sub" ||
-    s.value.state === "wait",
+const opacity = computed(() =>
+  s.value.state === "idle" ? "opacity-[0.72]" : "",
 );
 
 const badgeClass = computed(() => {
@@ -76,7 +59,9 @@ const badgeText = computed(() => {
       }
       return "tool";
     case "sub":
-      return `${s.value.active_subagents.length} sub${s.value.active_subagents.length === 1 ? "" : "s"} · main idle`;
+      return `${s.value.active_subagents.length} sub${
+        s.value.active_subagents.length === 1 ? "" : "s"
+      } · main idle`;
     case "wait":
       if (s.value.active_tool) {
         return `blocked · ${elapsed(s.value.active_tool.started_at)}`;
@@ -89,49 +74,125 @@ const badgeText = computed(() => {
   }
 });
 
-const bodyLabel = computed(() => {
+interface ThreadRow {
+  key: string;
+  kind: "main" | "sub";
+  label: string;
+  labelTone: string;
+  state: "running" | "wait" | "idle";
+  tool: ActiveTool | LastTool | null;
+  isLive: boolean;
+  toolStartedAt: string | null;
+  startedAt: string;
+  dotTone: "run" | "sub" | "attn" | "fg-3";
+  dotBreathing: boolean;
+}
+
+const mainTool = computed<ActiveTool | LastTool | null>(() => {
   switch (s.value.state) {
     case "running":
-      return "in flight";
+    case "wait":
+      return s.value.active_tool ?? null;
     case "sub":
-      return "subagents";
-    case "wait":
-      return "awaiting approval";
+      // Main thread is dormant while subagents run — don't echo a stale
+      // tool target; the subagent rows below carry the live activity.
+      return null;
+    case "idle":
+    case "stopped":
+    case "error":
+      return s.value.last_tool ?? null;
     default:
-      return "last action";
+      return s.value.active_tool ?? s.value.last_tool ?? null;
   }
 });
 
-const bodyLabelTone = computed(() =>
-  s.value.state === "wait" ? "text-attn" : "text-fg-3",
-);
+const threads = computed<ThreadRow[]>(() => {
+  const rows: ThreadRow[] = [];
 
-const toolNameClass = computed(() => {
-  switch (s.value.state) {
-    case "running":
-      return "text-run";
-    case "wait":
-      return "text-attn";
-    default:
-      return "text-fg-2";
+  let mainState: ThreadRow["state"] = "idle";
+  let dotTone: ThreadRow["dotTone"] = "fg-3";
+  let dotBreathing = false;
+  if (s.value.state === "running") {
+    mainState = "running";
+    dotTone = "run";
+    dotBreathing = true;
+  } else if (s.value.state === "wait") {
+    mainState = "wait";
+    dotTone = "attn";
+    dotBreathing = true;
   }
+
+  rows.push({
+    key: "main",
+    kind: "main",
+    label: "main",
+    labelTone: mainState === "idle" ? "text-fg-2" : "text-fg-1",
+    state: mainState,
+    tool: mainTool.value,
+    isLive: s.value.active_tool != null,
+    toolStartedAt: s.value.active_tool?.started_at ?? null,
+    startedAt: s.value.started_at,
+    dotTone,
+    dotBreathing,
+  });
+
+  for (const sub of s.value.active_subagents) {
+    rows.push(buildSubRow(sub));
+  }
+  return rows;
 });
 
-const targetClass = computed(() =>
-  s.value.state === "idle" ? "text-fg-2" : "text-fg-1",
-);
+function buildSubRow(sub: ActiveSubagent): ThreadRow {
+  const live = sub.active_tool != null;
+  const tool = sub.active_tool ?? sub.last_tool ?? null;
+  const label =
+    sub.description ??
+    sub.subagent_type ??
+    sub.agent_type ??
+    "subagent";
+  return {
+    key: sub.agent_id,
+    kind: "sub",
+    label,
+    labelTone: "text-sub",
+    state: live ? "running" : "idle",
+    tool,
+    isLive: live,
+    toolStartedAt: sub.active_tool?.started_at ?? null,
+    startedAt: sub.started_at,
+    dotTone: live ? "sub" : "fg-3",
+    dotBreathing: live,
+  };
+}
 
-const displayTool = computed(() => {
-  if (s.value.state === "idle" || s.value.state === "stopped" || s.value.state === "error") {
-    return s.value.last_tool ?? null;
+function rowAge(row: ThreadRow): string {
+  const iso = row.toolStartedAt ?? row.startedAt;
+  return ageFromNow(iso, props.now);
+}
+
+function rowToolNameTone(row: ThreadRow): string {
+  if (row.kind === "main") {
+    if (row.state === "running") return "text-run";
+    if (row.state === "wait") return "text-attn";
+    return "text-fg-2";
   }
-  return s.value.active_tool ?? null;
-});
+  return row.state === "running" ? "text-sub" : "text-fg-2";
+}
 
-const duration = computed(() =>
-  formatDurationShort(s.value.duration_ms),
-);
+function rowToolTargetTone(row: ThreadRow): string {
+  return row.state === "idle" ? "text-fg-2" : "text-fg-1";
+}
 
+function rowIdleLabel(row: ThreadRow): string {
+  if (row.kind === "main") {
+    if (s.value.state === "wait") return "awaiting approval";
+    if (s.value.state === "sub") return "idle · subagents running";
+    return "idle";
+  }
+  return "idle";
+}
+
+const duration = computed(() => formatDurationShort(s.value.duration_ms));
 const eventsDisplay = computed(() => s.value.event_count.toLocaleString());
 
 const waitGradient = computed(() =>
@@ -183,7 +244,6 @@ const startedTitle = computed(() => {
       'group block rounded-tile border border-line bg-bg-1 p-4 transition-colors duration-150 hover:border-line-2 hover:bg-bg-2 focus:outline-none focus:ring-1 focus:ring-line-2',
       topEdgeClass,
       opacity,
-      's.state === \'running\' ? \'border-t\' : \'\'',
     ]"
     :style="waitGradient"
     :data-state="s.state"
@@ -191,7 +251,6 @@ const startedTitle = computed(() => {
     <header class="flex items-start justify-between gap-2">
       <div class="min-w-0 flex-1">
         <div class="flex items-center gap-2">
-          <BreathingDot :tone="dotTone" :breathing="dotBreathing" />
           <h3
             :class="[
               'font-mono text-[13.5px] leading-none truncate',
@@ -210,7 +269,8 @@ const startedTitle = computed(() => {
             v-if="s.git && s.git.branch"
             class="font-mono text-[10.5px] px-1.5 py-0.5 rounded-chip border border-line text-fg-2 whitespace-nowrap"
           >
-            ⎇ {{ s.git.branch }}<span v-if="s.git.dirty" class="text-attn"> ●</span>
+            ⎇ {{ s.git.branch
+            }}<span v-if="s.git.dirty" class="text-attn"> ●</span>
           </span>
         </div>
         <p class="mt-0.5 font-mono text-[11px] text-fg-3 truncate">
@@ -228,44 +288,77 @@ const startedTitle = computed(() => {
           {{ s.permission_mode }}
         </span>
         <span
-          :class="[
-            'font-mono text-[11px] whitespace-nowrap',
-            badgeClass,
-          ]"
+          :class="['font-mono text-[11px] whitespace-nowrap', badgeClass]"
         >
           {{ badgeText }}
         </span>
       </div>
     </header>
 
-    <div class="mt-3 min-h-[42px]">
-      <div
-        :class="[
-          'font-mono uppercase tracking-[0.12em] text-[11px]',
-          bodyLabelTone,
-        ]"
-      >
-        {{ bodyLabel }}
-      </div>
-      <div v-if="s.state === 'sub'" class="mt-1.5">
-        <SubagentChips :subagents="s.active_subagents" :now="props.now" />
-      </div>
-      <div
-        v-else-if="displayTool"
-        class="mt-1 flex items-center gap-2 text-[13px]"
-      >
-        <span :class="['font-mono', toolNameClass]">{{ displayTool.name }}</span>
-        <span :class="['font-mono truncate', targetClass]">
-          {{ displayTool.target }}
-        </span>
-      </div>
-      <div v-else class="mt-1 text-[13px] text-fg-3">—</div>
+    <div
+      class="mt-3 font-mono uppercase tracking-[0.12em] text-[10.5px] text-fg-3"
+    >
+      threads
     </div>
+    <ul class="mt-1.5 space-y-1.5">
+      <li
+        v-for="row in threads"
+        :key="row.key"
+        class="flex items-start gap-2 text-[12.5px] leading-snug"
+      >
+        <span class="pt-[5px]">
+          <BreathingDot
+            :tone="row.dotTone"
+            :breathing="row.dotBreathing"
+            :size="6"
+          />
+        </span>
+        <div class="min-w-0 flex-1">
+          <div class="flex items-baseline justify-between gap-2">
+            <span
+              :class="[
+                'font-mono truncate',
+                row.labelTone,
+              ]"
+              :title="row.label"
+            >
+              <span v-if="row.kind === 'sub'" class="text-fg-3">└─ </span>{{ row.label }}
+            </span>
+            <span class="font-mono text-[10.5px] text-fg-3 whitespace-nowrap">
+              {{ rowAge(row) }}
+            </span>
+          </div>
+          <div
+            v-if="row.tool"
+            class="mt-0.5 flex items-baseline gap-1.5 text-[12px]"
+          >
+            <span
+              :class="['font-mono', rowToolNameTone(row)]"
+            >
+              {{ row.tool.name }}
+            </span>
+            <span
+              :class="['font-mono truncate', rowToolTargetTone(row)]"
+              :title="row.tool.target"
+            >
+              {{ row.tool.target || "—" }}
+            </span>
+          </div>
+          <div v-else class="mt-0.5 font-mono text-[12px] text-fg-3">
+            {{ rowIdleLabel(row) }}
+          </div>
+        </div>
+      </li>
+    </ul>
 
     <Sparkline class="mt-3" :bins="s.sparkline" />
 
-    <footer class="mt-3 flex items-center justify-between font-mono text-[11px] text-fg-3">
-      <span :title="startedTitle">started {{ formatStartTime(s.started_at) }} · {{ duration }}</span>
+    <footer
+      class="mt-3 flex items-center justify-between font-mono text-[11px] text-fg-3"
+    >
+      <span :title="startedTitle"
+        >started {{ formatStartTime(s.started_at) }} · {{ duration }}</span
+      >
       <span>{{ eventsDisplay }} ev</span>
     </footer>
   </RouterLink>

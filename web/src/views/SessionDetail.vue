@@ -15,7 +15,9 @@ import RecentList from "@/components/SessionDetail/RecentList.vue";
 import EventDrawer from "@/components/SessionDetail/EventDrawer.vue";
 import EventsTab from "@/components/SessionDetail/EventsTab.vue";
 import PromptsTab from "@/components/SessionDetail/PromptsTab.vue";
+import SubagentsPanel from "@/components/SessionDetail/SubagentsPanel.vue";
 import SegmentedControl from "@/components/ui/SegmentedControl.vue";
+import { buildSubagentSummaries } from "@/lib/subagents";
 
 const route = useRoute();
 const store = useSessionDetailStore();
@@ -69,6 +71,10 @@ const isLive = computed(() => {
   if (!s) return false;
   return s.state !== "stopped" && s.state !== "error";
 });
+
+const subagents = computed(() =>
+  buildSubagentSummaries(store.events, store.now),
+);
 
 const followNow = computed({
   get: () => prefs.followNow,
@@ -159,6 +165,12 @@ function onBarClick(call: ToolCall) {
         v-if="store.prompt"
         :body="store.prompt.body"
         :ts="store.prompt.ts"
+        class="mb-4"
+      />
+
+      <SubagentsPanel
+        v-if="tab === 'timeline' && subagents.length > 0"
+        :subagents="subagents"
         class="mb-4"
       />
 

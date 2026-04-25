@@ -145,18 +145,50 @@ async function seedSub(): Promise<void> {
       "investigate why the /hook/PreToolUse endpoint is returning 500s — check deploys, replay failing event, propose a fix",
   });
   const subs = [
-    { id: rid("agt"), type: "builder" },
-    { id: rid("agt"), type: "validator" },
-    { id: rid("agt"), type: "researcher" },
+    {
+      id: rid("agt"),
+      type: "builder",
+      description: "Rebuild ingest route to handle 500s",
+      prompt:
+        "The /hook/PreToolUse endpoint started returning 500s after the rate-limit middleware change. Read server/routes/hooks.ts and propose a patch that preserves rate limiting but stops failing closed when the limiter rejects.",
+    },
+    {
+      id: rid("agt"),
+      type: "validator",
+      description: "Replay failing event payloads in tests",
+      prompt:
+        "Take the failing payload captured in docs/incidents/2026-04-23.json and write a Bun test that reproduces the 500. Confirm the fix from the builder agent makes it green.",
+    },
+    {
+      id: rid("agt"),
+      type: "researcher",
+      description: "Survey rate-limit middlewares for Hono",
+      prompt:
+        "Scan the Hono ecosystem for rate-limit middlewares that fail open instead of closed. Summarise tradeoffs in 6 bullets.",
+    },
   ];
   // one done
   const doneId = rid("agt");
+  await post("PreToolUse", {
+    session_id: sessionId,
+    hook_event_name: "PreToolUse",
+    cwd,
+    tool_name: "Task",
+    tool_use_id: doneId,
+    tool_input: {
+      subagent_type: "test-writer",
+      description: "Add regression test for ingest 500",
+      prompt:
+        "Add a Bun test under server/routes/hooks.test.ts that POSTs the broken payload and asserts a 200 response.",
+    },
+  });
   await post("SubagentStart", {
     session_id: sessionId,
     hook_event_name: "SubagentStart",
     cwd,
     agent_id: doneId,
     agent_type: "test-writer",
+    tool_use_id: doneId,
   });
   for (let i = 0; i < 4; i++) {
     const t = rid("toolu");
@@ -191,12 +223,25 @@ async function seedSub(): Promise<void> {
   });
 
   for (const sub of subs) {
+    await post("PreToolUse", {
+      session_id: sessionId,
+      hook_event_name: "PreToolUse",
+      cwd,
+      tool_name: "Task",
+      tool_use_id: sub.id,
+      tool_input: {
+        subagent_type: sub.type,
+        description: sub.description,
+        prompt: sub.prompt,
+      },
+    });
     await post("SubagentStart", {
       session_id: sessionId,
       hook_event_name: "SubagentStart",
       cwd,
       agent_id: sub.id,
       agent_type: sub.type,
+      tool_use_id: sub.id,
     });
     for (let i = 0; i < 6; i++) {
       const t = rid("toolu");

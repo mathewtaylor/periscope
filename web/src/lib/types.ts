@@ -19,15 +19,20 @@ export interface ActiveTool {
   started_at: string;
 }
 
+export interface LastTool {
+  name: string;
+  target: string;
+}
+
 export interface ActiveSubagent {
   agent_id: string;
   agent_type: string;
   started_at: string;
-}
-
-export interface LastTool {
-  name: string;
-  target: string;
+  description: string | null;
+  subagent_type: string | null;
+  event_count: number;
+  active_tool: ActiveTool | null;
+  last_tool: LastTool | null;
 }
 
 export interface GitInfo {
