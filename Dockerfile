@@ -4,6 +4,12 @@ ARG BUN_VERSION=1.2.23
 FROM oven/bun:${BUN_VERSION} AS builder
 WORKDIR /app
 
+# Commit SHA from CI (or `--build-arg GIT_COMMIT=...` locally). Forwarded
+# into the Vite build via ENV so the SPA bundle carries the correct hash;
+# the .git directory is intentionally not copied into the build context.
+ARG GIT_COMMIT=unknown
+ENV GIT_COMMIT=${GIT_COMMIT}
+
 COPY package.json bun.lock* ./
 RUN bun install --frozen-lockfile
 

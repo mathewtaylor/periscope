@@ -28,6 +28,19 @@ const activeTab = computed(() => {
 });
 
 const evPerSec = computed(() => stats.evPerSec.toFixed(1));
+
+// Bundled at build time by Vite (see web/vite.config.ts). Short label for
+// the chip; full version + commit go into the tooltip so a quick mouseover
+// confirms which container is actually running.
+const APP_VERSION = __APP_VERSION__;
+const APP_COMMIT = __APP_COMMIT__;
+const versionShort = computed(() => {
+  const parts = APP_VERSION.split(".");
+  return parts.length >= 2 ? `v${parts[0]}.${parts[1]}` : `v${APP_VERSION}`;
+});
+const versionTitle = computed(
+  () => `Periscope v${APP_VERSION} · build ${APP_COMMIT}`,
+);
 </script>
 
 <template>
@@ -86,6 +99,11 @@ const evPerSec = computed(() => stats.evPerSec.toFixed(1));
           class="font-mono"
           title="Periscope server uptime (resets when the process restarts)"
         >{{ formatDurationShort(stats.uptimeMs) }}</span>
+        <VSep />
+        <span
+          class="font-mono text-fg-3"
+          :title="versionTitle"
+        >{{ versionShort }}</span>
       </div>
     </div>
     <slot name="alerts" />
